@@ -8,6 +8,7 @@ import { QuotationsSection } from "@/shared/crm/active-leads/lead-form-sections/
 import { SamplesSection } from "@/shared/crm/active-leads/lead-form-sections/samples-section";
 import type { SampleInput } from "@/shared/crm/samples/sample-form";
 import type { QuotationInput } from "@/shared/crm/quotations/quotation-form";
+import type { FollowUpInput } from "@/shared/crm/follow-ups/follow-up-form";
 import { leadEditHref, type LeadFormSource } from "@/shared/crm/active-leads/active-leads-utils";
 import {
   LEAD_PRIORITIES,
@@ -79,6 +80,7 @@ export default function LeadFormPage({ mode }: LeadFormPageProps) {
     updateLeadWithCompany,
     addSample,
     addQuotation,
+    addFollowUp,
     getCompany,
     getContact,
   } = useCrm();
@@ -86,6 +88,7 @@ export default function LeadFormPage({ mode }: LeadFormPageProps) {
   // Samples recorded before the lead exists; flushed into the store on create.
   const [pendingSamples, setPendingSamples] = useState<SampleInput[]>([]);
   const [pendingQuotations, setPendingQuotations] = useState<QuotationInput[]>([]);
+  const [pendingFollowUps, setPendingFollowUps] = useState<FollowUpInput[]>([]);
 
   const lead = useMemo(
     () => (mode === "edit" ? leads.find((l) => l.id === leadId) : undefined),
@@ -495,6 +498,8 @@ export default function LeadFormPage({ mode }: LeadFormPageProps) {
         setPendingSamples([]);
         pendingQuotations.forEach((q) => addQuotation(result.leadId, q));
         setPendingQuotations([]);
+        pendingFollowUps.forEach((f) => addFollowUp(result.leadId, f));
+        setPendingFollowUps([]);
         setDirty(false);
         setSaveSuccessLeadId(result.leadId);
       } else if (lead) {
@@ -1153,7 +1158,11 @@ export default function LeadFormPage({ mode }: LeadFormPageProps) {
               </div>
             </div>
 
-            <FollowUpsSection />
+            <FollowUpsSection
+              leadId={mode === "edit" ? leadId : ""}
+              pendingFollowUps={pendingFollowUps}
+              setPendingFollowUps={setPendingFollowUps}
+            />
             <SamplesSection
               leadId={mode === "edit" ? leadId : ""}
               pendingSamples={pendingSamples}

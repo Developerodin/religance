@@ -12,6 +12,8 @@ import {
 import { FollowUpDateCell } from "@/shared/crm/active-leads/follow-up-date-cell";
 import LeadStageBadge from "@/shared/crm/active-leads/lead-stage-badge";
 import { SendEmailModal } from "@/shared/crm/send-email/send-email-modal";
+import type { SendEmailTarget } from "@/shared/crm/send-email/send-email-types";
+import { sendEmailTargetFromLead } from "@/shared/crm/send-email/send-email-types";
 import { useCrm } from "@/shared/crm/store/crm-context";
 import { ConfirmDeleteOverlay } from "@/shared/crm/ui/confirm-delete-overlay";
 import {
@@ -104,7 +106,7 @@ export default function ActiveLeadsBoard() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [selectedLead, setSelectedLead] = useState<CrmLead | null>(null);
-  const [sendLead, setSendLead] = useState<CrmLead | null>(null);
+  const [sendTarget, setSendTarget] = useState<SendEmailTarget | null>(null);
 
   const companyFilter = searchParams.get("company") ?? "";
 
@@ -205,7 +207,7 @@ export default function ActiveLeadsBoard() {
     if (composeId) {
       const lead = leads.find((l) => l.id === composeId);
       if (lead) {
-        setSendLead(lead);
+        setSendTarget(sendEmailTargetFromLead(lead));
         setPendingComposeLeadId(null);
       }
     }
@@ -640,12 +642,12 @@ export default function ActiveLeadsBoard() {
       <ActiveLeadDetailDrawer
         lead={selectedLead}
         onClose={() => setSelectedLead(null)}
-        onSendEmail={(l) => setSendLead(l)}
+        onSendEmail={(l) => setSendTarget(sendEmailTargetFromLead(l))}
       />
 
       <SendEmailModal
-        lead={sendLead}
-        onClose={() => setSendLead(null)}
+        target={sendTarget}
+        onClose={() => setSendTarget(null)}
       />
 
       <ConfirmDeleteOverlay

@@ -43,6 +43,7 @@ import type {
   CrmContact,
   CrmEmail,
   CrmEmailMeta,
+  CrmFollowUp,
   CrmLead,
   CrmQuotation,
   CrmSample,
@@ -87,6 +88,7 @@ import { getBackendEmailMeta, saveBackendEmailMeta } from "./emails-api";
 import { getBackendLeads, saveBackendLeads } from "./leads-api";
 import { getBackendSamples, saveBackendSamples } from "./samples-api";
 import { getBackendQuotations, saveBackendQuotations } from "./quotations-api";
+import { getBackendFollowUps, saveBackendFollowUps } from "./follow-ups-api";
 import { getBackendDeals, saveBackendDeals } from "./deals-api";
 import { getBackendTimeline, saveBackendTimeline } from "./timeline-api";
 import {
@@ -103,13 +105,6 @@ export type SaveFromDiscoveryInput = {
   profile: CompanyProfileDetail;
   option: SaveToContactOption;
   contactIndex?: number;
-};
-
-export type SendLeadEmailInput = {
-  leadId: string;
-  templateId: string;
-  subject: string;
-  body: string;
 };
 
 export type SendCrmEmailInput = {
@@ -180,7 +175,6 @@ type CrmContextValue = CrmState & {
   markLeadLost: (leadId: string) => void;
   markLeadDormant: (leadId: string) => void;
   createDealFromLead: (leadId: string, value?: string) => string | null;
-  sendLeadEmail: (input: SendLeadEmailInput) => void;
   /** Resolves to null on success, or an error message if the send failed. */
   sendCrmEmail: (input: SendCrmEmailInput) => Promise<string | null>;
   linkEmailToLead: (emailId: string, leadId: string) => void;
@@ -228,6 +222,13 @@ type CrmContextValue = CrmState & {
   ) => string;
   updateQuotation: (id: string, patch: Partial<Omit<CrmQuotation, "id">>) => void;
   deleteQuotation: (id: string) => void;
+  addFollowUp: (
+    leadId: string,
+    input: Omit<CrmFollowUp, "id" | "leadId" | "contactedBy" | "createdAt">
+  ) => string;
+  updateFollowUp: (id: string, patch: Partial<Omit<CrmFollowUp, "id">>) => void;
+  deleteFollowUp: (id: string) => void;
+  getLeadFollowUps: (leadId: string) => CrmFollowUp[];
   getLeadEmails: (leadId: string) => CrmEmail[];
   getLeadTimeline: (leadId: string) => CrmTimelineEvent[];
   findCompanyByDiscoveryId: (discoveryId: string) => CrmCompany | undefined;
@@ -566,6 +567,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       | "deals"
       | "samples"
       | "quotations"
+      | "followUps"
       | "timeline"
       | "emailMeta",
       string[]
@@ -577,6 +579,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     deals: [],
     samples: [],
     quotations: [],
+    followUps: [],
     timeline: [],
     emailMeta: [],
   });
@@ -645,6 +648,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         deals: [],
         samples: [],
         quotations: [],
+        followUps: [],
         timeline: [],
         emailMeta: [],
       };
@@ -726,6 +730,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         dealsRes,
         samplesRes,
         quotationsRes,
+        followUpsRes,
         timelineRes,
         emailMetaRes,
       ] = await Promise.all([
@@ -735,6 +740,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         getBackendDeals(),
         getBackendSamples(),
         getBackendQuotations(),
+        getBackendFollowUps(),
         getBackendTimeline(),
         getBackendEmailMeta(),
       ]);
@@ -751,6 +757,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         dealsRes.live &&
         samplesRes.live &&
         quotationsRes.live &&
+        followUpsRes.live &&
         timelineRes.live &&
         emailMetaRes.live;
       if (!allLive) return false;
@@ -761,6 +768,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       const deals = dealsRes.live ? dealsRes.data : [];
       const samples = samplesRes.live ? samplesRes.data : [];
       const quotations = quotationsRes.live ? quotationsRes.data : [];
+      const followUps = followUpsRes.live ? followUpsRes.data : [];
       const timeline = timelineRes.live ? timelineRes.data : [];
       const emailMeta = emailMetaRes.live ? emailMetaRes.data : [];
 
@@ -780,6 +788,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         const mergedDeals = mergeById(deals, prev.deals);
         const mergedSamples = mergeById(samples, prev.samples);
         const mergedQuotations = mergeById(quotations, prev.quotations);
+        const mergedFollowUps = mergeById(followUps, prev.followUps);
         const mergedTimeline = mergeById(timeline, prev.timeline);
 
         const reconciledMeta = reconcileEmailMetaAfterSync(
@@ -794,6 +803,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           deals: mergedDeals.map((d) => d.id),
           samples: mergedSamples.map((s) => s.id),
           quotations: mergedQuotations.map((q) => q.id),
+          followUps: mergedFollowUps.map((f) => f.id),
           timeline: mergedTimeline.map((t) => t.id),
           emailMeta: reconciledMeta.map((e) => e.id),
         };
@@ -805,6 +815,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           deals: mergedDeals,
           samples: mergedSamples,
           quotations: mergedQuotations,
+          followUps: mergedFollowUps,
           timeline: mergedTimeline,
           emailMeta: reconciledMeta,
           emails: applyEmailMeta(prev.emails, reconciledMeta),
@@ -939,6 +950,15 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     );
     return () => window.clearTimeout(t);
   }, [state.quotations, persist]);
+
+  useEffect(() => {
+    if (!crmSyncedRef.current) return;
+    const t = window.setTimeout(
+      () => void persist("followUps", state.followUps, saveBackendFollowUps),
+      800
+    );
+    return () => window.clearTimeout(t);
+  }, [state.followUps, persist]);
 
   useEffect(() => {
     if (!crmSyncedRef.current) return;
@@ -1088,6 +1108,52 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       patch((prev) => ({
         ...prev,
         quotations: prev.quotations.filter((q) => q.id !== id),
+      }));
+    },
+    [patch]
+  );
+
+  const addFollowUp = useCallback(
+    (
+      leadId: string,
+      input: Omit<CrmFollowUp, "id" | "leadId" | "contactedBy" | "createdAt">
+    ): string => {
+      const id = generateCrmId("fu");
+      patch((prev) => ({
+        ...prev,
+        followUps: [
+          {
+            ...input,
+            id,
+            leadId,
+            contactedBy: getUserDisplayName() || "—",
+            createdAt: todayIso(),
+          },
+          ...prev.followUps,
+        ],
+      }));
+      return id;
+    },
+    [patch]
+  );
+
+  const updateFollowUp = useCallback(
+    (id: string, followUpPatch: Partial<Omit<CrmFollowUp, "id">>) => {
+      patch((prev) => ({
+        ...prev,
+        followUps: prev.followUps.map((f) =>
+          f.id === id ? { ...f, ...followUpPatch } : f
+        ),
+      }));
+    },
+    [patch]
+  );
+
+  const deleteFollowUp = useCallback(
+    (id: string) => {
+      patch((prev) => ({
+        ...prev,
+        followUps: prev.followUps.filter((f) => f.id !== id),
       }));
     },
     [patch]
@@ -1630,6 +1696,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           quotations: opts.quotations
             ? prev.quotations.filter((q) => q.leadId !== leadId)
             : prev.quotations,
+          followUps: prev.followUps.filter((f) => f.leadId !== leadId),
           contacts: contactId
             ? prev.contacts.filter((c) => c.id !== contactId)
             : prev.contacts,
@@ -1765,53 +1832,6 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       return id;
     },
     [patch, setLeadStage, state.leads]
-  );
-
-  const sendLeadEmail = useCallback(
-    (input: SendLeadEmailInput) => {
-      const lead = state.leads.find((l) => l.id === input.leadId);
-      if (!lead) return;
-
-      const newStage = stageAfterSendEmail(lead.stage);
-      const email: CrmEmail = {
-        id: generateCrmId("em"),
-        leadId: lead.id,
-        threadId: generateCrmId("thread"),
-        direction: "outbound",
-        mailboxLabels: ["SENT"],
-        subject: input.subject,
-        body: input.body,
-        preview: input.body.slice(0, 120),
-        fromEmail: "sales@religence.example.com",
-        toEmail: lead.contactEmail,
-        sentAt: todayIso(),
-      };
-
-      patch((prev) => ({
-        ...prev,
-        emails: [email, ...prev.emails],
-        leads: prev.leads.map((l) =>
-          l.id === lead.id
-            ? {
-                ...l,
-                stage: newStage,
-                lastActivity: todayIso(),
-                followUpDate: followUpInDays(5),
-              }
-            : l
-        ),
-        timeline: appendTimeline(prev.timeline, {
-          leadId: lead.id,
-          date: todayIso(),
-          title: "Email sent",
-          description: input.subject,
-          type: "email",
-          emailId: email.id,
-        }),
-      }));
-      setPendingComposeLeadId(null);
-    },
-    [patch, state.leads]
   );
 
   const sendCrmEmail = useCallback(
@@ -1963,7 +1983,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         email &&
         accountId &&
         state.gmailConnected &&
-        !email.threadId.startsWith("thread-")
+        email.messageId
       ) {
         const threadIds = [email.threadId];
         if (flag === "trashed" && on) {
@@ -2795,7 +2815,6 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       markLeadLost,
       markLeadDormant,
       createDealFromLead,
-      sendLeadEmail,
       sendCrmEmail,
       linkEmailToLead,
       setEmailFlag,
@@ -2816,6 +2835,13 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       addQuotation,
       updateQuotation,
       deleteQuotation,
+      addFollowUp,
+      updateFollowUp,
+      deleteFollowUp,
+      getLeadFollowUps: (leadId) =>
+        state.followUps
+          .filter((f) => f.leadId === leadId)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       getLeadEmails: (leadId) =>
         state.emails.filter((e) => e.leadId === leadId),
       getLeadTimeline: (leadId) =>
@@ -2870,7 +2896,6 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       markLeadLost,
       markLeadDormant,
       createDealFromLead,
-      sendLeadEmail,
       sendCrmEmail,
       linkEmailToLead,
       setEmailFlag,
@@ -2888,6 +2913,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       addQuotation,
       updateQuotation,
       deleteQuotation,
+      addFollowUp,
+      updateFollowUp,
+      deleteFollowUp,
       findCompanyByDiscoveryId,
       updateEmailTemplate,
       replaceEmailTemplates,

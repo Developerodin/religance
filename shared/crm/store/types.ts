@@ -173,6 +173,21 @@ export type CrmQuotation = {
   createdAt: string;
 };
 
+export type CrmFollowUp = {
+  id: string;
+  leadId: string;
+  /** DD-MM-YYYY display date from the form. */
+  entryDate: string;
+  contactedBy: string;
+  mode: string;
+  outcome: string;
+  summary: string;
+  infoShared: string;
+  nextStep: string;
+  nextFollowUp: string;
+  createdAt: string;
+};
+
 export type CrmDeal = {
   id: string;
   leadId: string;
@@ -256,6 +271,7 @@ export type CrmState = {
   deals: CrmDeal[];
   samples: CrmSample[];
   quotations: CrmQuotation[];
+  followUps: CrmFollowUp[];
   emails: CrmEmail[];
   /** Persisted overlay for `emails` (which are re-fetched from Graph, not stored). */
   emailMeta: CrmEmailMeta[];

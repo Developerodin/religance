@@ -1,43 +1,61 @@
 "use client";
 
 import { applyTemplate, useCrm } from "@/shared/crm/store/crm-context";
-import type { CrmLead } from "@/shared/crm/store/types";
+import { getUserDisplayName } from "@/shared/auth/auth-client";
+import type { SendEmailTarget } from "@/shared/crm/send-email/send-email-types";
+import type { TemplateVariables } from "@/shared/crm/store/email-templates";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 type SendEmailModalProps = {
-  lead: CrmLead | null;
+  target: SendEmailTarget | null;
   onClose: () => void;
 };
 
-export function SendEmailModal({ lead, onClose }: SendEmailModalProps) {
+function templateVarsFromTarget(target: SendEmailTarget): TemplateVariables {
+  return {
+    company_name: target.companyName ?? "",
+    contact_name: target.contactName,
+    salt_name: target.matchedSalt ?? "",
+    medicine_name: target.matchedMedicine ?? "",
+    dosage_form: target.dosageForm ?? "",
+    sender_name: getUserDisplayName(),
+  };
+}
+
+export function SendEmailModal({ target, onClose }: SendEmailModalProps) {
   const {
     emailTemplates,
-    sendLeadEmail,
-    buildTemplateVars,
+    sendCrmEmail,
+    syncOutlookInbox,
     gmailConnected,
     connectGmail,
+    outlookAccountId,
+    outlookEmail,
+    setPendingComposeLeadId,
   } = useCrm();
   const [templateId, setTemplateId] = useState(emailTemplates[0]?.id ?? "");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const titleId = useId();
   const descId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const updatesLead = Boolean(target?.leadId);
 
   useEffect(() => {
-    if (!lead || emailTemplates.length === 0) return;
+    if (!target || emailTemplates.length === 0) return;
     const tpl = emailTemplates[0];
-    const vars = buildTemplateVars(lead);
+    const vars = templateVarsFromTarget(target);
     setTemplateId(tpl.id);
     setSubject(applyTemplate(tpl.subject, vars));
     setBody(applyTemplate(tpl.body, vars));
-  }, [lead, buildTemplateVars, emailTemplates]);
+  }, [target, emailTemplates]);
 
   useEffect(() => {
-    if (!lead) return;
+    if (!target) return;
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -52,20 +70,20 @@ export function SendEmailModal({ lead, onClose }: SendEmailModalProps) {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKey);
     };
-  }, [lead, busy, onClose]);
+  }, [target, busy, onClose]);
 
-  if (!lead || typeof document === "undefined") return null;
+  if (!target || typeof document === "undefined") return null;
 
   const applySelectedTemplate = (id: string) => {
     const tpl = emailTemplates.find((t) => t.id === id);
     if (!tpl) return;
-    const vars = buildTemplateVars(lead);
+    const vars = templateVarsFromTarget(target);
     setTemplateId(id);
     setSubject(applyTemplate(tpl.subject, vars));
     setBody(applyTemplate(tpl.body, vars));
   };
 
-  const canSend = Boolean(subject.trim() && body.trim());
+  const canSend = Boolean(subject.trim() && body.trim() && target.contactEmail.trim());
 
   const handleConnect = async () => {
     setBusy(true);
@@ -83,8 +101,20 @@ export function SendEmailModal({ lead, onClose }: SendEmailModalProps) {
       return;
     }
     setBusy(true);
+    setSendError(null);
     try {
-      await sendLeadEmail({ leadId: lead.id, templateId, subject, body });
+      const error = await sendCrmEmail({
+        leadId: target.leadId ?? null,
+        toEmail: target.contactEmail.trim(),
+        subject: subject.trim(),
+        body: body.trim(),
+      });
+      if (error) {
+        setSendError(error);
+        return;
+      }
+      void syncOutlookInbox(outlookAccountId, outlookEmail, { background: true });
+      setPendingComposeLeadId(null);
       onClose();
     } finally {
       setBusy(false);
@@ -136,8 +166,21 @@ export function SendEmailModal({ lead, onClose }: SendEmailModalProps) {
               <div className="send-email-overlay__notice-copy">
                 <p className="send-email-overlay__notice-title">Outlook not connected</p>
                 <p className="send-email-overlay__notice-text">
-                  Connect your mailbox to send this email and log it to the lead timeline.
+                  Connect your mailbox to send this email
+                  {updatesLead ? " and log it to the lead timeline." : "."}
                 </p>
+              </div>
+            </div>
+          )}
+
+          {sendError && (
+            <div className="send-email-overlay__notice" role="alert">
+              <span className="send-email-overlay__notice-icon" aria-hidden>
+                <i className="ri-error-warning-line" />
+              </span>
+              <div className="send-email-overlay__notice-copy">
+                <p className="send-email-overlay__notice-title">Could not send</p>
+                <p className="send-email-overlay__notice-text">{sendError}</p>
               </div>
             </div>
           )}
@@ -145,9 +188,9 @@ export function SendEmailModal({ lead, onClose }: SendEmailModalProps) {
           <div className="send-email-overlay__recipient">
             <span className="send-email-overlay__recipient-label">To</span>
             <div className="send-email-overlay__recipient-value">
-              <strong>{lead.contactName}</strong>
+              <strong>{target.contactName}</strong>
               <span className="send-email-overlay__recipient-email">
-                {lead.contactEmail}
+                {target.contactEmail}
               </span>
             </div>
           </div>
@@ -202,7 +245,10 @@ export function SendEmailModal({ lead, onClose }: SendEmailModalProps) {
           </div>
 
           <p id={descId} className="send-email-overlay__hint">
-            Sending updates the lead stage and records this email on the timeline.
+            Sends via your connected Outlook mailbox
+            {updatesLead
+              ? ", then updates the lead stage and timeline."
+              : ". Link this contact to a lead to track stage and timeline."}
           </p>
         </div>
 
@@ -250,7 +296,7 @@ export function SendEmailModal({ lead, onClose }: SendEmailModalProps) {
               ) : (
                 <>
                   <i className="ri-mail-send-line me-1" aria-hidden />
-                  Send & update stage
+                  {updatesLead ? "Send & update stage" : "Send email"}
                 </>
               )}
             </button>

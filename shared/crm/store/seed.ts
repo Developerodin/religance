@@ -10,6 +10,7 @@ export function createInitialCrmState(): CrmState {
     deals: [],
     samples: [],
     quotations: [],
+    followUps: [],
     emails: [],
     emailMeta: [],
     timeline: [],

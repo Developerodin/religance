@@ -1,80 +1,98 @@
 "use client";
 
-import { getUserDisplayName } from "@/shared/auth/auth-client";
-import { useState } from "react";
+import {
+  buildFollowUpInput,
+  emptyFollowUpForm,
+  FOLLOW_UP_MODES,
+  FOLLOW_UP_OUTCOMES,
+  inputToFollowUpForm,
+  followUpToForm,
+  type FollowUpFormModel,
+  type FollowUpInput,
+} from "@/shared/crm/follow-ups/follow-up-form";
+import { useCrm } from "@/shared/crm/store/crm-context";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import {
   LeadFormDataTable,
+  LeadFormRowActions,
   LeadFormSectionShell,
 } from "./lead-form-section-shell";
 
-const FOLLOW_UP_MODES = [
-  "",
-  "Call",
-  "Email",
-  "WhatsApp",
-  "Meeting",
-  "Site visit",
-  "Other",
-] as const;
+const dash = (v: string | null | undefined) => (v?.trim() ? v : "—");
 
-const FOLLOW_UP_OUTCOMES = [
-  "",
-  "Positive",
-  "Neutral",
-  "No response",
-  "Follow-up needed",
-  "Closed",
-] as const;
-
-type FollowUpRow = {
+type DisplayRow = FollowUpInput & {
   id: string;
-  entryDate: string;
   contactedBy: string;
-  mode: string;
-  summary: string;
-  outcome: string;
-  nextStep: string;
-  nextFollowUp: string;
+  onEdit: () => void;
+  onDelete: () => void;
 };
 
-const emptyForm = () => ({
-  entryDate: "",
-  mode: "",
-  outcome: "",
-  summary: "",
-  infoShared: "",
-  nextStep: "",
-  nextFollowUp: "",
-});
+export function FollowUpsSection({
+  leadId,
+  pendingFollowUps,
+  setPendingFollowUps,
+}: {
+  leadId?: string;
+  pendingFollowUps?: FollowUpInput[];
+  setPendingFollowUps?: Dispatch<SetStateAction<FollowUpInput[]>>;
+}) {
+  const { followUps, addFollowUp, updateFollowUp, deleteFollowUp } = useCrm();
+  const [form, setForm] = useState<FollowUpFormModel>(emptyFollowUpForm());
+  const [editingKey, setEditingKey] = useState<string | null>(null);
 
-export function FollowUpsSection() {
-  const [rows, setRows] = useState<FollowUpRow[]>([]);
-  const [form, setForm] = useState(emptyForm);
-
-  const handleAdd = () => {
-    if (!form.summary.trim() && !form.mode) return;
-    const entryDate =
-      form.entryDate.trim() ||
-      new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
-    setRows((prev) => [
-      {
-        id: `fu-${Date.now()}`,
-        entryDate,
-        contactedBy: getUserDisplayName() || "—",
-        mode: form.mode || "—",
-        summary: form.summary.trim() || "—",
-        outcome: form.outcome || "—",
-        nextStep: form.nextStep.trim() || "—",
-        nextFollowUp: form.nextFollowUp.trim() || "—",
-      },
-      ...prev,
-    ]);
-    setForm(emptyForm());
+  const isBuffer = !leadId;
+  const resetForm = () => {
+    setForm(emptyFollowUpForm());
+    setEditingKey(null);
   };
 
+  const handleSubmit = () => {
+    if (!form.summary.trim() && !form.mode) return;
+    const input = buildFollowUpInput(form);
+    if (isBuffer) {
+      if (editingKey != null) {
+        const idx = Number(editingKey);
+        setPendingFollowUps?.((prev) =>
+          prev.map((f, i) => (i === idx ? input : f))
+        );
+      } else {
+        setPendingFollowUps?.((prev) => [input, ...prev]);
+      }
+    } else if (editingKey != null) {
+      updateFollowUp(editingKey, input);
+    } else {
+      addFollowUp(leadId, input);
+    }
+    resetForm();
+  };
+
+  const rows: DisplayRow[] = isBuffer
+    ? (pendingFollowUps ?? []).map((f, i) => ({
+        ...f,
+        id: String(i),
+        contactedBy: "—",
+        onEdit: () => {
+          setForm(inputToFollowUpForm(f));
+          setEditingKey(String(i));
+        },
+        onDelete: () =>
+          setPendingFollowUps?.((prev) => prev.filter((_, j) => j !== i)),
+      }))
+    : followUps
+        .filter((f) => f.leadId === leadId)
+        .map((f) => ({
+          ...f,
+          onEdit: () => {
+            setForm(followUpToForm(f));
+            setEditingKey(f.id);
+          },
+          onDelete: () => deleteFollowUp(f.id),
+        }));
+
   return (
-    <LeadFormSectionShell title="Follow-ups" badge="UI preview">
+    <LeadFormSectionShell title="Follow-ups">
       <LeadFormDataTable
+        actionsColumn
         columns={[
           "Entry date",
           "Contacted by",
@@ -83,23 +101,31 @@ export function FollowUpsSection() {
           "Outcome",
           "Next step",
           "Next follow-up",
+          "Actions",
         ]}
         emptyMessage="No follow-ups logged yet."
         rows={rows.map((r) => [
           r.entryDate,
           r.contactedBy,
-          r.mode,
+          dash(r.mode),
           <span key="s" className="max-w-[12rem] truncate block" title={r.summary}>
-            {r.summary}
+            {dash(r.summary)}
           </span>,
-          r.outcome,
-          r.nextStep,
-          r.nextFollowUp,
+          dash(r.outcome),
+          dash(r.nextStep),
+          dash(r.nextFollowUp),
+          <LeadFormRowActions
+            key="actions"
+            onEdit={r.onEdit}
+            onDelete={r.onDelete}
+          />,
         ])}
       />
 
       <div className="lead-form-subgroup mt-4">
-        <h6 className="text-[0.8125rem] font-semibold mb-3">Add follow-up</h6>
+        <h6 className="text-[0.8125rem] font-semibold mb-3">
+          {editingKey != null ? "Edit follow-up" : "Add follow-up"}
+        </h6>
         <div className="grid grid-cols-12 gap-3">
           <div className="col-span-12 md:col-span-4">
             <label className="form-label text-[0.75rem]" htmlFor="fu-entry-date">
@@ -190,22 +216,30 @@ export function FollowUpsSection() {
               className="form-control"
               placeholder="DD-MM-YYYY"
               value={form.nextFollowUp}
-              onChange={(e) => setForm((f) => ({ ...f, nextFollowUp: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, nextFollowUp: e.target.value }))
+              }
             />
           </div>
-          <div className="col-span-12 flex justify-end">
+          <div className="col-span-12 flex justify-end gap-2">
+            {editingKey != null && (
+              <button
+                type="button"
+                className="ti-btn ti-btn-light !min-h-[2.75rem]"
+                onClick={resetForm}
+              >
+                Cancel edit
+              </button>
+            )}
             <button
               type="button"
               className="ti-btn ti-btn-primary !min-h-[2.75rem]"
-              onClick={handleAdd}
+              onClick={handleSubmit}
             >
-              Add follow-up
+              {editingKey != null ? "Save changes" : "Add follow-up"}
             </button>
           </div>
         </div>
-        <p className="text-[0.75rem] text-textmuted mb-0 mt-3">
-          Saved with the lead in a future release — entries here are session-only for now.
-        </p>
       </div>
     </LeadFormSectionShell>
   );

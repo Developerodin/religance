@@ -273,6 +273,19 @@ export default function LeadDiscoveryBoard() {
     );
   }, [filteredCompanies, sortColumn, sortDirection]);
 
+  useEffect(() => {
+    if (!masterDataSynced || buyersLoading) return;
+    const discoveryCompanyId = searchParams.get("discoveryCompanyId");
+    if (!discoveryCompanyId) return;
+    const match = catalogueCompanies.find((c) => c.id === discoveryCompanyId);
+    if (match) setProfileCompany(match);
+  }, [
+    masterDataSynced,
+    buyersLoading,
+    searchParams,
+    catalogueCompanies,
+  ]);
+
   const handleSortColumn = useCallback((column: ResultsSortColumn) => {
     if (sortColumn !== column) {
       setSortColumn(column);

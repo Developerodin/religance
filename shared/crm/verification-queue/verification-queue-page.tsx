@@ -5,12 +5,11 @@ import LeadScoreBadge from "@/shared/crm/lead-discovery/lead-score-badge";
 import LeadStageBadge from "@/shared/crm/active-leads/lead-stage-badge";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Fragment } from "react";
+import { leadDiscoverySourceHref } from "@/shared/crm/active-leads/lead-source-utils";
 
 export default function VerificationQueuePage() {
   const { leads, verifyLead } = useCrm();
-  const router = useRouter();
   const queue = leads.filter((l) => l.stage === "Saved");
 
   return (
@@ -76,17 +75,14 @@ export default function VerificationQueuePage() {
                         >
                           Verify
                         </button>
-                        <button
-                          type="button"
+                        <Link
+                          href={`/active-leads?lead=${lead.id}`}
                           className="ti-btn ti-btn-sm ti-btn-light"
-                          onClick={() =>
-                            router.push(`/active-leads?lead=${lead.id}`)
-                          }
                         >
                           Review
-                        </button>
+                        </Link>
                         <Link
-                          href="/lead-discovery"
+                          href={leadDiscoverySourceHref(lead)}
                           className="ti-btn ti-btn-sm ti-btn-light"
                         >
                           Source

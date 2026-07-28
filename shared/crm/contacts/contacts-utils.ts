@@ -1,4 +1,6 @@
 import { isTerminalStage } from "@/shared/crm/active-leads/lead-stages";
+import type { SendEmailTarget } from "@/shared/crm/send-email/send-email-types";
+import { sendEmailTargetFromContact } from "@/shared/crm/send-email/send-email-types";
 import type { CrmCompany, CrmContact, CrmLead } from "@/shared/crm/store/types";
 
 export type EnrichedContact = {
@@ -99,4 +101,15 @@ export function sortEnrichedContacts(
 
 export function hasContactFilters(search: string, companyFilter: string): boolean {
   return Boolean(search.trim() || companyFilter);
+}
+
+export function resolveSendEmailTarget(row: EnrichedContact): SendEmailTarget {
+  const activeLead =
+    row.leads.find((l) => !isTerminalStage(l.stage)) ?? row.leads[0];
+  return sendEmailTargetFromContact({
+    name: row.contact.name,
+    email: row.contact.email,
+    companyName: row.company?.name,
+    lead: activeLead ?? null,
+  });
 }

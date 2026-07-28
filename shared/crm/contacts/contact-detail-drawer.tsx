@@ -18,6 +18,7 @@ type ContactDetailDrawerProps = {
   onClose: () => void;
   onDelete?: (row: EnrichedContact) => void;
   onSelectLead: (lead: CrmLead) => void;
+  onSendEmail?: (row: EnrichedContact) => void;
 };
 
 function DrawerSection({
@@ -60,6 +61,7 @@ export function ContactDetailDrawer({
   onClose,
   onDelete,
   onSelectLead,
+  onSendEmail,
 }: ContactDetailDrawerProps) {
   const open = row !== null;
 
@@ -128,13 +130,24 @@ export function ContactDetailDrawer({
         </header>
 
         <div className="saved-contacts-drawer-actions">
-          <a
-            href={`mailto:${contact.email}`}
-            className="saved-contacts-drawer-action saved-contacts-drawer-action--primary"
-          >
-            <i className="ri-mail-send-line"></i>
-            <span>Send email</span>
-          </a>
+          {onSendEmail ? (
+            <button
+              type="button"
+              className="saved-contacts-drawer-action saved-contacts-drawer-action--primary"
+              onClick={() => onSendEmail(row)}
+            >
+              <i className="ri-mail-send-line"></i>
+              <span>Send email</span>
+            </button>
+          ) : (
+            <a
+              href={`mailto:${contact.email}`}
+              className="saved-contacts-drawer-action saved-contacts-drawer-action--primary"
+            >
+              <i className="ri-mail-send-line"></i>
+              <span>Send email</span>
+            </a>
+          )}
           <div className="saved-contacts-drawer-actions-secondary">
             {contact.phone ? (
               <a

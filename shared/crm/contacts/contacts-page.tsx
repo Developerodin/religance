@@ -8,12 +8,15 @@ import {
   filterEnrichedContacts,
   formatContactDate,
   hasContactFilters,
+  resolveSendEmailTarget,
   sortEnrichedContacts,
   type ContactSort,
   type EnrichedContact,
 } from "@/shared/crm/contacts/contacts-utils";
 import { InboxAvatar } from "@/shared/crm/inbox/inbox-avatar";
 import { SendEmailModal } from "@/shared/crm/send-email/send-email-modal";
+import type { SendEmailTarget } from "@/shared/crm/send-email/send-email-types";
+import { sendEmailTargetFromLead } from "@/shared/crm/send-email/send-email-types";
 import { useCrm } from "@/shared/crm/store/crm-context";
 import type { CrmLead } from "@/shared/crm/store/types";
 import { ConfirmDeleteOverlay } from "@/shared/crm/ui/confirm-delete-overlay";
@@ -38,7 +41,7 @@ export default function ContactsPage() {
   const [page, setPage] = useState(1);
   const [selectedRow, setSelectedRow] = useState<EnrichedContact | null>(null);
   const [selectedLead, setSelectedLead] = useState<CrmLead | null>(null);
-  const [sendLead, setSendLead] = useState<CrmLead | null>(null);
+  const [sendTarget, setSendTarget] = useState<SendEmailTarget | null>(null);
   const [pendingDelete, setPendingDelete] = useState<EnrichedContact | null>(
     null
   );
@@ -457,6 +460,7 @@ export default function ContactsPage() {
         row={selectedRow}
         onClose={() => setSelectedRow(null)}
         onDelete={(row) => requestDelete(row)}
+        onSendEmail={(row) => setSendTarget(resolveSendEmailTarget(row))}
         onSelectLead={(lead) => {
           setSelectedRow(null);
           setSelectedLead(lead);
@@ -466,10 +470,13 @@ export default function ContactsPage() {
       <ActiveLeadDetailDrawer
         lead={selectedLead}
         onClose={() => setSelectedLead(null)}
-        onSendEmail={(l) => setSendLead(l)}
+        onSendEmail={(l) => setSendTarget(sendEmailTargetFromLead(l))}
       />
 
-      <SendEmailModal lead={sendLead} onClose={() => setSendLead(null)} />
+      <SendEmailModal
+        target={sendTarget}
+        onClose={() => setSendTarget(null)}
+      />
 
       <ConfirmDeleteOverlay
         open={pendingDelete != null}
