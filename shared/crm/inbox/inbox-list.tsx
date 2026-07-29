@@ -9,6 +9,7 @@ import {
   INBOX_LIST_TAG_CLASS,
   INBOX_TAG_LABELS,
 } from "./inbox-utils";
+import { InboxSyncIndicator } from "./inbox-sync-indicator";
 
 function formatLastSynced(iso: string): string {
   const syncedAt = new Date(iso).getTime();
@@ -150,7 +151,7 @@ export function InboxListPanel({
             <div className="crm-inbox-list-sync-meta">
               {syncing ? (
                 <span className="crm-inbox-sync-status" aria-live="polite">
-                  <i className="ri-loader-4-line animate-spin" aria-hidden />
+                  <InboxSyncIndicator active />
                   Syncing…
                 </span>
               ) : lastSyncedAt ? (
@@ -167,7 +168,11 @@ export function InboxListPanel({
                   aria-label="Refresh inbox"
                   title="Refresh inbox"
                 >
-                  <i className={`ri-refresh-line ${syncing ? "animate-spin" : ""}`} />
+                  {syncing ? (
+                    <InboxSyncIndicator active size="sm" />
+                  ) : (
+                    <i className="ri-refresh-line" aria-hidden />
+                  )}
                 </button>
               ) : null}
             </div>
