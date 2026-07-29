@@ -35,12 +35,14 @@ type NotificationContextValue = {
   total: number;
   activityTotal: number;
   loading: boolean;
+  markingAllAsRead: boolean;
   error: string | null;
   refresh: () => Promise<void>;
   removeNotification: (
     id: string,
     opts?: { navigate?: string }
   ) => Promise<boolean>;
+  markAllAsRead: () => Promise<void>;
 };
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
@@ -51,6 +53,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [total, setTotal] = useState(0);
   const [activityTotal, setActivityTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [markingAllAsRead, setMarkingAllAsRead] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
 
@@ -122,17 +125,49 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     [items, refresh, router]
   );
 
+  const markAllAsRead = useCallback(async () => {
+    if (markingAllAsRead || total === 0) return;
+    setMarkingAllAsRead(true);
+    const snapshot = [...items];
+    try {
+      for (const item of snapshot) {
+        const res = await deleteNotification(item.id, "dismiss");
+        if (!res.live) {
+          void refresh();
+          return;
+        }
+      }
+      setItems([]);
+      setTotal(0);
+      setActivityTotal(0);
+    } finally {
+      setMarkingAllAsRead(false);
+    }
+  }, [items, total, markingAllAsRead, refresh]);
+
   const value = useMemo<NotificationContextValue>(
     () => ({
       items,
       total,
       activityTotal,
       loading,
+      markingAllAsRead,
       error,
       refresh,
       removeNotification,
+      markAllAsRead,
     }),
-    [items, total, activityTotal, loading, error, refresh, removeNotification]
+    [
+      items,
+      total,
+      activityTotal,
+      loading,
+      markingAllAsRead,
+      error,
+      refresh,
+      removeNotification,
+      markAllAsRead,
+    ]
   );
 
   return (

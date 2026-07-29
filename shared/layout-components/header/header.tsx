@@ -31,8 +31,10 @@ const Header = () => {
     total,
     activityTotal,
     loading,
+    markingAllAsRead,
     error,
     removeNotification,
+    markAllAsRead,
   } = useNotifications();
 
   const showBadge = !loading && !error && total > 0;
@@ -315,9 +317,18 @@ const Header = () => {
                 <div className="main-header-dropdown !-mt-3 !p-0 hs-dropdown-menu ti-dropdown-menu bg-white !w-[22rem] border-0 border-defaultborder hidden !m-0"
                   aria-labelledby="dropdown-notification">
 
-                  <div className="ti-dropdown-header !m-0 !p-4 !bg-transparent flex justify-between items-center">
-                    <p className="mb-0 text-[1.0625rem] text-defaulttextcolor font-semibold ">Notifications</p>
-                    <span className="text-[0.75em] py-[0.25rem/2] px-[0.45rem] font-[600] rounded-sm bg-secondary/10 text-secondary"
+                  <div className="ti-dropdown-header !m-0 !p-4 !bg-transparent flex justify-between items-center gap-2">
+                    <p className="mb-0 text-[1.0625rem] text-defaulttextcolor font-semibold shrink-0">Notifications</p>
+                    <button
+                      type="button"
+                      aria-label="Mark all notifications as read"
+                      disabled={total === 0 || loading || markingAllAsRead}
+                      onClick={() => void markAllAsRead()}
+                      className="text-[0.75rem] font-medium text-[#536485] hover:text-primary disabled:opacity-50 disabled:pointer-events-none py-2 px-2 min-h-[2.75rem] whitespace-nowrap transition-colors"
+                    >
+                      {markingAllAsRead ? "Clearing…" : "Mark all as read"}
+                    </button>
+                    <span className="text-[0.75em] py-[0.25rem/2] px-[0.45rem] font-[600] rounded-sm bg-secondary/10 text-secondary shrink-0"
                       id="notifiation-data">{`${total} Unread`}</span>
                   </div>
                   <div className="dropdown-divider"></div>
