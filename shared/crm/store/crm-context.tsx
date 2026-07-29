@@ -474,36 +474,7 @@ function findEmailMeta(
   );
 }
 
-/** Archived/trashed mail lives in Outlook folders we must re-fetch or it vanishes. */
-function mergeFlaggedEmails(
-  synced: CrmEmail[],
-  prevEmails: CrmEmail[],
-  meta: CrmEmailMeta[]
-): CrmEmail[] {
-  const syncedThreads = new Set(synced.map((e) => e.threadId));
-  const syncedIds = new Set(synced.map((e) => e.id));
-  const extras: CrmEmail[] = [];
-
-  for (const prev of prevEmails) {
-    if (
-      isLocalOnlyCrmEmail(prev) ||
-      syncedIds.has(prev.id) ||
-      syncedThreads.has(prev.threadId)
-    ) {
-      continue;
-    }
-    const entry = findEmailMeta(prev, meta);
-    if (!entry?.archived && !entry?.trashed) continue;
-    const labels = new Set(prev.mailboxLabels ?? []);
-    if (entry.archived) labels.add("ARCHIVE");
-    if (entry.trashed) labels.add("TRASH");
-    extras.push({ ...prev, mailboxLabels: [...labels] });
-  }
-
-  return dedupeEmailsByThread([...synced, ...extras]);
-}
-
-/** Background poll: keep paginated threads, merge updated INBOX/SENT at top. */
+/** Sync/poll/pagination merge: keep known threads, layer updated rows on top. */
 function mergeBackgroundSyncEmails(
   synced: CrmEmail[],
   prevEmails: CrmEmail[]
@@ -577,6 +548,17 @@ function assertEmailDedupInvariant(): void {
   ]);
   if (merged.length !== 1 || merged[0].id !== "outlook-conv1") {
     throw new Error("dedupeEmailsByThread invariant failed");
+  }
+
+  // /v1/email/sync returns a DELTA, never a snapshot — an empty response means
+  // "nothing changed", not "mailbox is empty". Replacing instead of merging here
+  // blanked the inbox on every reload of a quiet mailbox.
+  const painted = [
+    row("outlook-a", "conv-a", "MPA sample sheet", "2026-07-29T11:16:00Z"),
+    row("outlook-b", "conv-b", "Purchase order", "2026-07-28T09:00:00Z"),
+  ];
+  if (mergeBackgroundSyncEmails([], painted).length !== painted.length) {
+    throw new Error("empty delta sync must not drop painted rows");
   }
 }
 if (process.env.NODE_ENV === "development") {
@@ -2853,9 +2835,12 @@ export function CrmProvider({ children }: { children: ReactNode }) {
                 : email
             );
           }
-          const mergedEmails = background
-            ? mergeBackgroundSyncEmails(dedupedEmails, working)
-            : mergeFlaggedEmails(dedupedEmails, working, emailMeta);
+          // /v1/email/sync is a delta feed in BOTH modes — "bootstrap" only widens
+          // the folder set, it never re-enumerates (backend reuses the stored
+          // deltaLink). Treating the response as a full snapshot wiped every
+          // painted row whenever the delta came back empty. Removals arrive via
+          // applyDeltaRemovals above, so merging is the correct semantics.
+          const mergedEmails = mergeBackgroundSyncEmails(dedupedEmails, working);
           mergedForCache = applyEmailMeta(mergedEmails, emailMeta);
           return {
             ...prev,
