@@ -14,23 +14,16 @@
     "guide:pdf": "bash scripts/generate-user-guide-pdf.sh"
   },
   "dependencies": {
-    "@reduxjs/toolkit": "^1.9.7",
-    "@simonwep/pickr": "^1.9.1",
     "@tailwindcss/forms": "^0.5.7",
     "apexcharts": "^3.49.1",
     "autoprefixer": "^10.4.19",
-    "firebase": "^10.11.0",
     "next": "16.2.4",
     "preline": "^2.1.0",
     "react": "^18",
     "react-apexcharts": "^1.4.1",
     "react-dom": "^18",
-    "react-redux": "^8.1.3",
-    "redux": "^4.2.1",
-    "redux-thunk": "^2.4.2",
     "sass": "^1.75.0",
     "simplebar-react": "^3.2.5",
-    "tailwind-clip-path": "^1.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
