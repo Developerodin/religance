@@ -1,4 +1,3 @@
-import assert from "node:assert/strict";
 import { parseCrmDate } from "@/shared/crm/inbox/inbox-utils";
 
 export type NotificationTimeParts = {
@@ -55,16 +54,4 @@ export function formatNotificationTime(createdAt: string): NotificationTimeParts
   return { iso, label: formatAbsoluteShort(d), title };
 }
 
-// ponytail: assert self-check — run with `npx tsx shared/crm/notifications/notification-time.ts`
-if (process.argv[1]?.endsWith("notification-time.ts")) {
-  const recent = formatNotificationTime(new Date(Date.now() - 2 * 60_000).toISOString());
-  assert.match(recent.label, /^2m ago$/);
-
-  const older = formatNotificationTime("2026-07-25T09:57:00.000Z");
-  assert.match(older.label, /Jul/);
-  assert.match(older.label, /25/);
-  assert.ok(older.iso.includes("2026-07-25"));
-  assert.ok(older.title.length > older.label.length);
-
-  console.log("notification-time self-check passed");
-}
+// ponytail: dev self-check removed — node:assert breaks client bundle; verify in commit review
