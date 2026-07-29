@@ -1,17 +1,16 @@
 "use client"
 import React, { Fragment, useState, useEffect, useRef } from "react";
-import { connect } from "react-redux";
-import { ThemeChanger } from "../../redux/action";
 import Link from "next/link";
 import { basePath } from "@/next.config";
 import BrandLogo from "@/shared/layout-components/brand-logo/brand-logo";
-import store from "@/shared/redux/store";
 import SimpleBar from 'simplebar-react';
 import Menuloop from "./menuloop";
 import { usePathname, useRouter } from "next/navigation";
 import { CRM_HOME_PATH, MenuItems } from "./nav";
+import { useTheme } from "@/shared/theme/theme-provider";
 
-const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
+const Sidebar = () => {
+	const { theme, setTheme } = useTheme();
 	const [menuitems, setMenuitems] = useState(MenuItems);
 	const settingsSubmenuCollapsedByUser = useRef(false);
 
@@ -77,8 +76,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		const mainContent = document.querySelector(".main-content");
 		if (window.innerWidth <= 992) {
 			if (mainContent) {
-				const theme = store.getState();
-				ThemeChanger({ ...theme, dataToggled: "close" });
+				setTheme({ dataToggled: "close" });
 			}
 			else if (document.documentElement.getAttribute('data-nav-layout') == 'horizontal') {
 				closeMenu();
@@ -96,24 +94,21 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 
 	function Onhover() {
 
-		const theme = store.getState();
 		if ((theme.dataToggled == 'icon-overlay-close' || theme.dataToggled == 'detached-close') && theme.iconOverlay != 'open') {
-			ThemeChanger({ ...theme, "iconOverlay": "open" });
+			setTheme({ "iconOverlay": "open" });
 		}
 	}
 	function Outhover() {
 
-		const theme = store.getState();
 		if ((theme.dataToggled == 'icon-overlay-close' || theme.dataToggled == 'detached-close') && theme.iconOverlay == 'open') {
-			ThemeChanger({ ...theme, "iconOverlay": "" });
+			setTheme({ "iconOverlay": "" });
 		}
 	}
 
 	function menuClose() {
 		;
-		const theme = store.getState();
 		if (window.innerWidth <= 992) {
-			ThemeChanger({ ...theme, dataToggled: "close" });
+			setTheme({ dataToggled: "close" });
 		}
 		const overlayElement = document.querySelector("#responsive-overlay") as HTMLElement | null;
 		if (overlayElement) {
@@ -136,7 +131,6 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		WindowPreSize.push(window.innerWidth);
 		if (WindowPreSize.length > 2) { WindowPreSize.shift() }
 
-		const theme = store.getState();
 		const currentWidth = WindowPreSize[WindowPreSize.length - 1];
 		const prevWidth = WindowPreSize[WindowPreSize.length - 2];
 
@@ -144,12 +138,12 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		if (WindowPreSize.length > 1) {
 			if (currentWidth < 992 && prevWidth >= 992) {
 				// less than 992;
-				ThemeChanger({ ...theme, dataToggled: "close" });
+				setTheme({ dataToggled: "close" });
 			}
 
 			if (currentWidth >= 992 && prevWidth < 992) {
 				// greater than 992
-				ThemeChanger({ ...theme, dataToggled: theme.dataVerticalStyle === "doublemenu" ? "double-menu-open" : "" });
+				setTheme({ dataToggled: theme.dataVerticalStyle === "doublemenu" ? "double-menu-open" : "" });
 
 			}
 		}
@@ -234,7 +228,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 			let mainContainer1Width = mainContainer1.offsetWidth;
 
 			if (menuNav.scrollWidth > mainContainer1.offsetWidth) {
-				if (!(local_varaiable.dataVerticalStyle.dir === "rtl")) {
+				if (!(theme.dir === "rtl")) {
 					if (Math.abs(check) > Math.abs(marginLeftValue)) {
 						menuNav.style.marginInlineEnd = "0";
 
@@ -310,7 +304,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 			let mainContainer1Width = mainContainer1.offsetWidth;
 
 			if (menuNav.scrollWidth > mainContainer1.offsetWidth) {
-				if (!(local_varaiable.dataVerticalStyle.dir === "rtl")) {
+				if (!(theme.dir === "rtl")) {
 					if (Math.abs(check) <= Math.abs(marginLeftValue)) {
 						menuNav.style.marginInlineStart = "0px";
 					}
@@ -377,7 +371,6 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	let hasParentLevel = 0;
 
 	function setSubmenu(event: any, targetObject: any, MenuItems = menuitems) {
-		const theme = store.getState();
 		if ((window.screen.availWidth <= 992 || theme.dataNavStyle != "icon-hover") && (window.screen.availWidth <= 992 || theme.dataNavStyle != "menu-hover")) {
 		if (!event?.ctrlKey) {
 			for (const item of MenuItems) {
@@ -419,7 +412,6 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 
 	function setMenuAncestorsActive(targetObject: any) {
 		const parent = getParentObject(menuitems, targetObject);
-		const theme = store.getState();
 		if (parent) {
 			if (hasParentLevel > 2) {
 				hasParent = true;
@@ -431,7 +423,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		}
 		else if (!hasParent) {
 			if (theme.dataVerticalStyle == 'doublemenu') {
-				ThemeChanger({ ...theme, dataToggled: "double-menu-close" });
+				setTheme({ dataToggled: "double-menu-close" });
 			}
 		}
 	}
@@ -497,7 +489,6 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	}, [pathname]);
 
 	function toggleSidemenu(event: any, targetObject: any, MenuItems = menuitems) {
-		const theme = store.getState();
 		let element = event.target;
 		if ((theme.dataNavStyle != "icon-hover" && theme.dataNavStyle != "menu-hover") || (window.innerWidth < 992) || (theme.dataNavLayout != "horizontal") && (theme.dataToggled != "icon-hover-closed" && theme.dataToggled != "menu-hover-closed")) {
 			// {
@@ -515,7 +506,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 						setAncestorsActive(MenuItems, item);
 					} else {
 						if (theme.dataVerticalStyle == 'doublemenu') {
-							ThemeChanger({ ...theme, dataToggled: "double-menu-close" });
+							setTheme({ dataToggled: "double-menu-close" });
 						}
 					}
 
@@ -531,7 +522,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 			}
 			if (targetObject?.children && targetObject.active) {
 				if (theme.dataVerticalStyle == 'doublemenu' && theme.dataToggled != 'double-menu-open') {
-					ThemeChanger({ ...theme, dataToggled: "double-menu-open" });
+					setTheme({ dataToggled: "double-menu-open" });
 				}
 			}
 			if (element && theme.dataNavLayout == 'horizontal' && (theme.dataNavStyle == 'menu-click' || theme.dataNavStyle == 'icon-click')) {
@@ -571,18 +562,17 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	}
 
 	function setAncestorsActive(MenuItems: any, targetObject: any) {
-		const theme = store.getState();
 		const parent = findParent(MenuItems, targetObject);
 		if (parent) {
 			parent.active = true;
 			if (parent.active) {
-				ThemeChanger({ ...theme, dataToggled: "double-menu-open" });
+				setTheme({ dataToggled: "double-menu-open" });
 			}
 
 			setAncestorsActive(MenuItems, parent);
 		} else {
 			if (theme.dataVerticalStyle == "doublemenu") {
-				ThemeChanger({ ...theme, dataToggled: "double-menu-close" });
+				setTheme({ dataToggled: "double-menu-close" });
 			}
 
 		}
@@ -614,15 +604,13 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 
 	const Sideclick = () => {
 		if (window.innerWidth > 992) {
-			const	theme = store.getState()  
 			if(theme.iconOverlay != "open"){
-				ThemeChanger({ ...theme, iconOverlay: "open" });
+				setTheme({ iconOverlay: "open" });
 			}
 		}
 	};
 
 	function HoverToggleInnerMenuFn(event: any, item: any) {
-		const theme = store.getState();
 		let element = event.target;
 		if (element && theme.dataNavLayout == "horizontal" && (theme.dataNavStyle == "menu-hover" || theme.dataNavStyle == "icon-hover")) {
 			const listItem = element.closest("li");
@@ -709,7 +697,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 												: ""}
 											{levelone.type === "link" ?
 												<Link href={levelone.path} className={`side-menu__item ${levelone.selected ? 'active' : ''}`} >
-												<span className={`hs-tooltip inline-block [--placement:right] leading-none ${local_varaiable?.dataVerticalStyle == 'doublemenu' ? '' : 'hidden'}`}>
+												<span className={`hs-tooltip inline-block [--placement:right] leading-none ${theme?.dataVerticalStyle == 'doublemenu' ? '' : 'hidden'}`}>
 													<button type="button" className="hs-tooltip-toggle  inline-flex justify-center items-center
 															">
 														{levelone.icon}
@@ -719,7 +707,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 													</button>
 												</span>
 
-												{local_varaiable.dataVerticalStyle != "doublemenu" ? levelone.icon :""}
+												{theme.dataVerticalStyle != "doublemenu" ? levelone.icon :""}
 												<span className="side-menu__label">{levelone.title} {levelone.badgetxt ? (<span className={levelone.class}> {levelone.badgetxt}</span>
 													) : (
 														""
@@ -756,8 +744,4 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	);
 };
 
-const mapStateToProps = (state: any) => ({
-	local_varaiable: state
-});
-
-export default connect(mapStateToProps, { ThemeChanger })(Sidebar);
+export default Sidebar;
