@@ -89,6 +89,12 @@ import { getBackendLeads, saveBackendLeads } from "./leads-api";
 import { getBackendSamples, saveBackendSamples } from "./samples-api";
 import { getBackendQuotations, saveBackendQuotations } from "./quotations-api";
 import { getBackendFollowUps, saveBackendFollowUps } from "./follow-ups-api";
+import {
+  deleteNotificationByDedupeKey,
+  postNotification,
+  postNotificationScan,
+} from "@/shared/crm/notifications/notifications-api";
+import { triggerNotificationRefresh } from "@/shared/crm/notifications/notification-context";
 import { getBackendDeals, saveBackendDeals } from "./deals-api";
 import { getBackendTimeline, saveBackendTimeline } from "./timeline-api";
 import {
@@ -181,7 +187,7 @@ type CrmContextValue = CrmState & {
   /** Star / read / archive / trash. Persisted, so it survives a reload. */
   setEmailFlag: (emailId: string, flag: EmailFlag, on: boolean) => void;
   emailIdsWithFlag: (flag: EmailFlag) => string[];
-  connectGmail: () => Promise<void>;
+  connectOutlook: () => Promise<void>;
   disconnectOutlook: (accountId?: string | null) => Promise<void>;
   syncOutlookInbox: (
     preferredAccountId?: string | null,
@@ -284,6 +290,28 @@ function outlookEmailId(threadId: string): string {
   return `outlook-${threadId}`;
 }
 
+/** Local-only row added on send before Graph sync; replaced by outlook-* id. */
+function isLocalOnlyCrmEmail(email: CrmEmail): boolean {
+  return email.id.startsWith("em-") && !email.messageId;
+}
+
+function emailListFingerprint(email: CrmEmail): string {
+  const peer =
+    email.direction === "inbound" ? email.fromEmail : email.toEmail;
+  return `${email.subject.trim().toLowerCase()}\0${extractEmailAddress(peer)}`;
+}
+
+function preferSyncedEmailRow(a: CrmEmail, b: CrmEmail): CrmEmail {
+  if (isLocalOnlyCrmEmail(a) && !isLocalOnlyCrmEmail(b)) return b;
+  if (isLocalOnlyCrmEmail(b) && !isLocalOnlyCrmEmail(a)) return a;
+  const aTimed = a.sentAt.includes("T");
+  const bTimed = b.sentAt.includes("T");
+  if (aTimed !== bTimed) return aTimed ? a : b;
+  if (a.messageId && !b.messageId) return a;
+  if (b.messageId && !a.messageId) return b;
+  return a.sentAt.localeCompare(b.sentAt) >= 0 ? a : b;
+}
+
 function mergeEmailMeta(a: CrmEmailMeta, b: CrmEmailMeta): CrmEmailMeta {
   return {
     id: a.id,
@@ -379,7 +407,13 @@ function mergeFlaggedEmails(
   const extras: CrmEmail[] = [];
 
   for (const prev of prevEmails) {
-    if (syncedIds.has(prev.id) || syncedThreads.has(prev.threadId)) continue;
+    if (
+      isLocalOnlyCrmEmail(prev) ||
+      syncedIds.has(prev.id) ||
+      syncedThreads.has(prev.threadId)
+    ) {
+      continue;
+    }
     const entry = findEmailMeta(prev, meta);
     if (!entry?.archived && !entry?.trashed) continue;
     const labels = new Set(prev.mailboxLabels ?? []);
@@ -399,22 +433,71 @@ function mergeBackgroundSyncEmails(
   const syncedThreads = new Set(synced.map((e) => e.threadId));
   const syncedIds = new Set(synced.map((e) => e.id));
   const extras = prevEmails.filter(
-    (prev) => !syncedIds.has(prev.id) && !syncedThreads.has(prev.threadId)
+    (prev) =>
+      !isLocalOnlyCrmEmail(prev) &&
+      !syncedIds.has(prev.id) &&
+      !syncedThreads.has(prev.threadId)
   );
   return dedupeEmailsByThread([...synced, ...extras]).sort((a, b) =>
     b.sentAt.localeCompare(a.sentAt)
   );
 }
 
-function dedupeEmailsByThread(emails: CrmEmail[]): CrmEmail[] {
+/** Pre-Outlook optimistic sends never hit Graph — drop on sync. */
+export function dedupeEmailsByThread(emails: CrmEmail[]): CrmEmail[] {
+  const synced = emails.filter((email) => !isLocalOnlyCrmEmail(email));
+
+  const byFingerprint = new Map<string, CrmEmail>();
+  for (const email of synced) {
+    const fp = emailListFingerprint(email);
+    const existing = byFingerprint.get(fp);
+    byFingerprint.set(
+      fp,
+      existing ? preferSyncedEmailRow(existing, email) : email
+    );
+  }
+
   const byThread = new Map<string, CrmEmail>();
-  for (const email of emails) {
+  for (const email of byFingerprint.values()) {
     const existing = byThread.get(email.threadId);
-    if (!existing || email.sentAt.localeCompare(existing.sentAt) > 0) {
-      byThread.set(email.threadId, email);
-    }
+    byThread.set(
+      email.threadId,
+      existing ? preferSyncedEmailRow(existing, email) : email
+    );
   }
   return [...byThread.values()];
+}
+
+// ponytail: dev-only guard — fingerprint dedupe must collapse Graph threadId drift.
+function assertEmailDedupInvariant(): void {
+  const row = (
+    id: string,
+    threadId: string,
+    subject: string,
+    sentAt: string
+  ): CrmEmail => ({
+    id,
+    leadId: null,
+    threadId,
+    direction: "outbound",
+    subject,
+    body: "",
+    preview: "",
+    fromEmail: "me@co.com",
+    toEmail: "test@co.com",
+    sentAt,
+  });
+  const merged = dedupeEmailsByThread([
+    row("outlook-conv1", "conv1", "Re: Budesonide", "2026-07-29T10:23:00Z"),
+    row("outlook-msg2", "msg2", "Re: Budesonide", "2026-07-29"),
+    row("em-local", "thread-x", "Re: Budesonide", "2026-07-29"),
+  ]);
+  if (merged.length !== 1 || merged[0].id !== "outlook-conv1") {
+    throw new Error("dedupeEmailsByThread invariant failed");
+  }
+}
+if (process.env.NODE_ENV === "development") {
+  assertEmailDedupInvariant();
 }
 
 function applyEmailMeta(emails: CrmEmail[], meta: CrmEmailMeta[]): CrmEmail[] {
@@ -467,13 +550,17 @@ function buildCrmEmailFromThreadItem(
   detailRes: Awaited<ReturnType<typeof getOutlookThread>>,
   accountEmail: string
 ): CrmEmail | null {
-  const threadId = item.thread.threadId || item.thread.id;
+  const listThreadId = item.thread.threadId || item.thread.id;
   const messages = detailRes.live ? [...detailRes.data.messages] : [];
   messages.sort((a, b) => {
     const ta = new Date(a.date ?? 0).getTime();
     const tb = new Date(b.date ?? 0).getTime();
     return ta - tb;
   });
+
+  const threadId =
+    messages.map((m) => m.threadId).find((id): id is string => Boolean(id)) ??
+    listThreadId;
 
   const latestMessage =
     messages.length > 0 ? messages[messages.length - 1] : null;
@@ -545,7 +632,8 @@ function buildCrmEmailFromThreadItem(
     preview,
     fromEmail: fromEmail || accountEmail,
     toEmail,
-    sentAt: latestMessage?.date ?? item.thread.date ?? todayIso(),
+    sentAt:
+      latestMessage?.date ?? item.thread.date ?? new Date().toISOString(),
     attachments,
   };
 }
@@ -602,6 +690,17 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     useState<InboxFolderName | null>(null);
   const loadingMoreInboxFolderRef = useRef<InboxFolderName | null>(null);
   const outlookSyncInFlightRef = useRef(false);
+  const prevInboundSnapshotRef = useRef<
+    Map<string, { messageId: string | null; sentAt: string }>
+  >(new Map());
+  const prevInboundAccountIdRef = useRef<string | null>(null);
+  const syncOutlookInboxRef = useRef<
+    (
+      preferredAccountId?: string | null,
+      preferredEmail?: string | null,
+      options?: OutlookSyncOptions
+    ) => Promise<void>
+  >(() => Promise.resolve());
   const [outlookInboxSyncing, setOutlookInboxSyncing] = useState(false);
   const [outlookInboxLastSyncedAt, setOutlookInboxLastSyncedAt] = useState<
     string | null
@@ -917,12 +1016,16 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!crmSyncedRef.current) return;
-    const t = window.setTimeout(
-      () => void persist("leads", state.leads, saveBackendLeads),
-      800
-    );
+    const t = window.setTimeout(async () => {
+      const res = await saveBackendLeads(state.leads, baseIdsRef.current.leads);
+      if (res.live) {
+        baseIdsRef.current.leads = state.leads.map((i) => i.id);
+        const scanRes = await postNotificationScan();
+        if (scanRes.live) triggerNotificationRefresh();
+      }
+    }, 800);
     return () => window.clearTimeout(t);
-  }, [state.leads, persist]);
+  }, [state.leads]);
 
   useEffect(() => {
     if (!crmSyncedRef.current) return;
@@ -953,12 +1056,19 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!crmSyncedRef.current) return;
-    const t = window.setTimeout(
-      () => void persist("followUps", state.followUps, saveBackendFollowUps),
-      800
-    );
+    const t = window.setTimeout(async () => {
+      const res = await saveBackendFollowUps(
+        state.followUps,
+        baseIdsRef.current.followUps
+      );
+      if (res.live) {
+        baseIdsRef.current.followUps = state.followUps.map((i) => i.id);
+        const scanRes = await postNotificationScan();
+        if (scanRes.live) triggerNotificationRefresh();
+      }
+    }, 800);
     return () => window.clearTimeout(t);
-  }, [state.followUps, persist]);
+  }, [state.followUps]);
 
   useEffect(() => {
     if (!crmSyncedRef.current) return;
@@ -1836,6 +1946,13 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   const sendCrmEmail = useCallback(
     async (input: SendCrmEmailInput): Promise<string | null> => {
+      if (!state.outlookConnected || !state.outlookAccountId) {
+        return "Connect Outlook before sending email.";
+      }
+      if (!state.outlookEmail) {
+        return "Outlook mailbox email unavailable. Reconnect Outlook.";
+      }
+
       const lead =
         (input.leadId
           ? state.leads.find((l) => l.id === input.leadId)
@@ -1845,32 +1962,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
             l.contactEmail.toLowerCase() === input.toEmail.toLowerCase()
         );
 
-      const email: CrmEmail = {
-        id: generateCrmId("em"),
-        leadId: lead?.id ?? null,
-        threadId: generateCrmId("thread"),
-        direction: "outbound",
-        mailboxLabels: ["SENT"],
-        subject: input.subject,
-        body: input.body,
-        preview: input.body.slice(0, 120),
-        fromEmail: state.outlookEmail ?? "sales@religence.example.com",
-        toEmail: input.toEmail,
-        sentAt: todayIso(),
-      };
-
-      // No mailbox, no send. Recording it locally anyway would leave the CRM
-      // claiming it sent an email that never left the building.
-      if (!state.gmailConnected || !state.outlookAccountId) {
-        return "Connect Outlook before sending email.";
-      }
-
       const html = input.body.replace(/\n/g, "<br/>");
       const messageId = input.replyToMessageId ?? null;
       const accountId = state.outlookAccountId;
-      // With a real Outlook message id, use the threading endpoints so the
-      // mail lands in the recipient's existing conversation. Without one
-      // (locally composed mail), fall back to a plain send.
       const sent =
         messageId && input.mode === "forward"
           ? await forwardOutlookMessage({ accountId, messageId, to: input.toEmail, html })
@@ -1888,40 +1982,43 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         return sent.error;
       }
 
-      patch((prev) => {
-        if (!lead) {
-          return { ...prev, emails: [email, ...prev.emails] };
-        }
-        const newStage = stageAfterSendEmail(lead.stage);
-        return {
-          ...prev,
-          emails: [email, ...prev.emails],
-          leads: prev.leads.map((l) =>
-            l.id === lead.id
-              ? {
-                  ...l,
-                  stage: newStage,
-                  lastActivity: todayIso(),
-                  followUpDate: followUpInDays(5),
-                }
-              : l
-          ),
-          timeline: appendTimeline(prev.timeline, {
-            leadId: lead.id,
-            date: todayIso(),
-            title: "Email sent",
-            description: input.subject,
-            type: "email",
-            emailId: email.id,
-          }),
-        };
-      });
+      if (lead) {
+        patch((prev) => {
+          const newStage = stageAfterSendEmail(lead.stage);
+          return {
+            ...prev,
+            leads: prev.leads.map((l) =>
+              l.id === lead.id
+                ? {
+                    ...l,
+                    stage: newStage,
+                    lastActivity: todayIso(),
+                    followUpDate: followUpInDays(5),
+                  }
+                : l
+            ),
+            timeline: appendTimeline(prev.timeline, {
+              leadId: lead.id,
+              date: todayIso(),
+              title: "Email sent",
+              description: input.subject,
+              type: "email",
+            }),
+          };
+        });
+      }
+
+      void syncOutlookInboxRef.current(
+        state.outlookAccountId,
+        state.outlookEmail,
+        { background: true }
+      );
 
       return null;
     },
     [
       patch,
-      state.gmailConnected,
+      state.outlookConnected,
       state.leads,
       state.outlookAccountId,
       state.outlookEmail,
@@ -1976,13 +2073,13 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     (emailId: string, flag: EmailFlag, on: boolean) => {
       // Mirror the change into Outlook, best effort: Outlook is the source of
       // truth, so if the call fails the next sync simply restores its state.
-      // Locally composed mail ("thread-…" ids) doesn't exist in Outlook.
+      // Locally composed mail without a Graph message id can't be mirrored in Outlook.
       const email = state.emails.find((e) => e.id === emailId);
       const accountId = state.outlookAccountId;
       if (
         email &&
         accountId &&
-        state.gmailConnected &&
+        state.outlookConnected &&
         email.messageId
       ) {
         const threadIds = [email.threadId];
@@ -2059,7 +2156,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         };
       });
     },
-    [patch, state.emails, state.gmailConnected, state.outlookAccountId]
+    [patch, state.emails, state.outlookConnected, state.outlookAccountId]
   );
 
   const emailIdsWithFlag = useCallback(
@@ -2067,6 +2164,106 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       state.emailMeta.filter((m) => m[flag]).map((m) => m.id),
     [state.emailMeta]
   );
+
+  const emitInboundEmailNotifications = useCallback(
+    async (emails: CrmEmail[], accountId: string) => {
+      // Account switch: reset snapshot — treat as first sync for new mailbox
+      if (prevInboundAccountIdRef.current !== accountId) {
+        prevInboundSnapshotRef.current = new Map();
+        prevInboundAccountIdRef.current = accountId;
+      }
+
+      const prev = prevInboundSnapshotRef.current;
+      const isFirstSync = prev.size === 0;
+      const syncStartedAt = Date.now();
+      const nextSnapshot = new Map<
+        string,
+        { messageId: string | null; sentAt: string }
+      >();
+      let didEmit = false;
+
+      for (const email of emails) {
+        if (email.direction !== "inbound") continue;
+        if (!email.mailboxLabels?.includes("INBOX")) continue;
+        const threadId = email.threadId;
+        if (!threadId) continue;
+
+        nextSnapshot.set(threadId, {
+          messageId: email.messageId ?? null,
+          sentAt: email.sentAt,
+        });
+
+        const prior = prev.get(threadId);
+        const isNewThread = !prior;
+        const isNewMessage =
+          prior &&
+          (prior.messageId !== email.messageId || prior.sentAt !== email.sentAt);
+        const arrivedDuringSync =
+          new Date(email.sentAt).getTime() > syncStartedAt;
+
+        // First sync: seed snapshot only — no flood of historical inbox
+        if (isFirstSync) {
+          if (arrivedDuringSync) {
+            await postNotification({
+              type: "inbound_email",
+              dedupeKey: `inbound_email:${threadId}`,
+              title: `New email: ${email.subject}`,
+              body: `From ${email.fromEmail}`,
+              href: `/inbox?email=outlook-${threadId}`,
+              meta: {
+                threadId,
+                messageId: email.messageId ?? undefined,
+                sentAt: email.sentAt,
+              },
+            });
+            didEmit = true;
+          }
+          continue;
+        }
+
+        if (isNewThread || isNewMessage) {
+          await postNotification({
+            type: "inbound_email",
+            dedupeKey: `inbound_email:${threadId}`,
+            title: `New email: ${email.subject}`,
+            body: `From ${email.fromEmail}`,
+            href: `/inbox?email=outlook-${threadId}`,
+            meta: {
+              threadId,
+              messageId: email.messageId ?? undefined,
+              sentAt: email.sentAt,
+            },
+          });
+          didEmit = true;
+        }
+      }
+
+      prevInboundSnapshotRef.current = nextSnapshot;
+      if (didEmit) triggerNotificationRefresh();
+    },
+    []
+  );
+
+  const emitOutlookErrorNotification = useCallback(
+    async (accountId: string, accountEmail: string) => {
+      await postNotification({
+        type: "outlook_error",
+        dedupeKey: `outlook_error:${accountId}`,
+        title: "Outlook sync failed",
+        body: `${accountEmail} — reconnect to restore inbox.`,
+        href: "/inbox",
+        meta: { accountId },
+      });
+      triggerNotificationRefresh();
+    },
+    []
+  );
+
+  const clearOutlookErrorNotification = useCallback(async (accountId: string) => {
+    // Idempotent: DELETE /dedupe returns 204 even when row missing (Task 3)
+    await deleteNotificationByDedupeKey(`outlook_error:${accountId}`);
+    triggerNotificationRefresh();
+  }, []);
 
   const syncOutlookInbox = useCallback(
     async (
@@ -2086,6 +2283,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       const seq = ++outlookSyncSeqRef.current;
       const isStale = () => seq !== outlookSyncSeqRef.current;
 
+      let accountEmail = "";
       try {
         const accountsRes = await listOutlookAccounts();
         if (isStale()) return;
@@ -2110,7 +2308,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         if (!account) {
           patch((prev) => ({
             ...prev,
-            gmailConnected: false,
+            outlookConnected: false,
             outlookAccountId: null,
             outlookEmail: null,
             outlookAccounts: [],
@@ -2119,13 +2317,15 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        accountEmail = account.email;
+
         // Token undecryptable / refresh-token revoked: the backend flips the
         // account to status "error", then every Graph call 401s and gets
         // swallowed → silent empty inbox. Surface a reconnect prompt instead.
         if (account.status !== "active") {
           patch((prev) => ({
             ...prev,
-            gmailConnected: true,
+            outlookConnected: true,
             outlookAccountId: account.id,
             outlookEmail: account.email,
             outlookAccounts: accounts,
@@ -2134,6 +2334,8 @@ export function CrmProvider({ children }: { children: ReactNode }) {
             setOutlookSyncError(
               "Outlook credentials expired. Please reconnect Outlook."
             );
+            if (isStale()) return;
+            await emitOutlookErrorNotification(account.id, accountEmail);
           }
           return;
         }
@@ -2143,7 +2345,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         // whole time and the click reads as "nothing happened".
         patch((prev) => ({
           ...prev,
-          gmailConnected: true,
+          outlookConnected: true,
           outlookAccountId: account.id,
           outlookEmail: account.email,
           outlookAccounts: accounts,
@@ -2240,7 +2442,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
             // Keep the last good mailbox on transient Graph errors.
             patch((prev) => ({
               ...prev,
-              gmailConnected: true,
+              outlookConnected: true,
               outlookAccountId: account.id,
               outlookEmail: account.email,
               outlookAccounts: accounts,
@@ -2257,7 +2459,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const accountEmail = account.email.toLowerCase();
+        const normalizedAccountEmail = account.email.toLowerCase();
         const allThreadItems = [...threadBuckets.values()].sort((a, b) => {
           const ta = new Date(a.thread.date ?? 0).getTime();
           const tb = new Date(b.thread.date ?? 0).getTime();
@@ -2309,7 +2511,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           const email = buildCrmEmailFromThreadItem(
             item,
             threadDetails[i],
-            accountEmail
+            normalizedAccountEmail
           );
           if (email) syncedEmails.push(email);
         });
@@ -2338,7 +2540,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
             : mergeFlaggedEmails(dedupedEmails, prev.emails, emailMeta);
           return {
             ...prev,
-            gmailConnected: true,
+            outlookConnected: true,
             outlookAccountId: account.id,
             outlookEmail: account.email,
             outlookAccounts: accounts,
@@ -2346,6 +2548,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
             emailMeta,
           };
         });
+
+        if (isStale()) return;
+        await emitInboundEmailNotifications(dedupedEmails, account.id);
+        await clearOutlookErrorNotification(account.id);
 
         setOutlookInboxLastSyncedAt(new Date().toISOString());
       } catch (err) {
@@ -2355,6 +2561,11 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           setOutlookSyncError(
             err instanceof Error ? err.message : "Couldn't load your inbox."
           );
+          const accountId = outlookAccountIdRef.current;
+          if (accountId && accountEmail) {
+            if (isStale()) return;
+            await emitOutlookErrorNotification(accountId, accountEmail);
+          }
         }
       } finally {
         outlookSyncInFlightRef.current = false;
@@ -2365,8 +2576,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     // account is read through a ref instead. As a dependency it changed this
     // callback's identity on every sync, which re-fired the bootstrap effect
     // that depends on it, which synced again — 2-3x the requests per switch.
-    [patch]
+    [patch, emitInboundEmailNotifications, emitOutlookErrorNotification, clearOutlookErrorNotification]
   );
+
+  syncOutlookInboxRef.current = syncOutlookInbox;
 
   useEffect(() => {
     outlookAccountIdRef.current = state.outlookAccountId;
@@ -2381,7 +2594,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     if (
       !hydrated ||
       !authUserId ||
-      !state.gmailConnected ||
+      !state.outlookConnected ||
       !state.outlookAccountId
     ) {
       return;
@@ -2426,7 +2639,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   }, [
     hydrated,
     authUserId,
-    state.gmailConnected,
+    state.outlookConnected,
     state.outlookAccountId,
     syncOutlookInbox,
   ]);
@@ -2530,7 +2743,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     [inboxFolderPagination, patch, state.emails, state.outlookEmail]
   );
 
-  const connectGmail = useCallback(async () => {
+  const connectOutlook = useCallback(async () => {
     if (typeof window === "undefined") return;
     if (!getUser()?.id) return;
     const result = await fetchOutlookConnectUrl();
@@ -2558,7 +2771,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       const nextAccount = remaining[0] ?? null;
       patch((prev) => ({
         ...prev,
-        gmailConnected: Boolean(nextAccount),
+        outlookConnected: Boolean(nextAccount),
         outlookAccountId: nextAccount?.id ?? null,
         outlookEmail: nextAccount?.email ?? null,
         outlookAccounts: remaining,
@@ -2819,7 +3032,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       linkEmailToLead,
       setEmailFlag,
       emailIdsWithFlag,
-      connectGmail,
+      connectOutlook,
       disconnectOutlook,
       syncOutlookInbox,
       switchOutlookAccount,
@@ -2900,7 +3113,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       linkEmailToLead,
       setEmailFlag,
       emailIdsWithFlag,
-      connectGmail,
+      connectOutlook,
       disconnectOutlook,
       syncOutlookInbox,
       switchOutlookAccount,
