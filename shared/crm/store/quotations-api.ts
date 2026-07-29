@@ -1,6 +1,6 @@
 "use client";
 
-import { apiGet, apiPut, type JsonResult } from "./api-client";
+import { apiGet, apiSend, type JsonResult } from "./api-client";
 import type { CrmQuotation } from "./types";
 
 export async function getBackendQuotations(): Promise<JsonResult<CrmQuotation[]>> {
@@ -11,7 +11,7 @@ export async function saveBackendQuotations(
   quotations: CrmQuotation[],
   baseIds: string[]
 ): Promise<JsonResult<CrmQuotation[]>> {
-  return apiPut<CrmQuotation[]>("/v1/crm/quotations", {
+  return apiSend<CrmQuotation[]>("PUT", "/v1/crm/quotations", {
     items: quotations,
     baseIds,
   });

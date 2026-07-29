@@ -1,6 +1,6 @@
 "use client";
 
-import { apiGet, apiPut, type JsonResult } from "./api-client";
+import { apiGet, apiSend, type JsonResult } from "./api-client";
 import type { CrmLead } from "./types";
 
 // Per-user pipeline leads, persisted in Mongo (source of truth).
@@ -12,5 +12,5 @@ export async function saveBackendLeads(
   leads: CrmLead[],
   baseIds: string[]
 ): Promise<JsonResult<CrmLead[]>> {
-  return apiPut<CrmLead[]>("/v1/crm/leads", { items: leads, baseIds });
+  return apiSend<CrmLead[]>("PUT", "/v1/crm/leads", { items: leads, baseIds });
 }

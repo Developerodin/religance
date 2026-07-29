@@ -1,6 +1,6 @@
 "use client";
 
-import { apiGet, apiPut, type JsonResult } from "./api-client";
+import { apiGet, apiSend, type JsonResult } from "./api-client";
 import type { CrmFollowUp } from "./types";
 
 export async function getBackendFollowUps(): Promise<JsonResult<CrmFollowUp[]>> {
@@ -11,7 +11,7 @@ export async function saveBackendFollowUps(
   followUps: CrmFollowUp[],
   baseIds: string[]
 ): Promise<JsonResult<CrmFollowUp[]>> {
-  return apiPut<CrmFollowUp[]>("/v1/crm/followUps", {
+  return apiSend<CrmFollowUp[]>("PUT", "/v1/crm/followUps", {
     items: followUps,
     baseIds,
   });

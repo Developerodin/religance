@@ -1,6 +1,6 @@
 "use client";
 
-import { apiGet, apiPut, type JsonResult } from "./api-client";
+import { apiGet, apiSend, type JsonResult } from "./api-client";
 import type { CrmTimelineEvent } from "./types";
 
 // Per-user CRM timeline events, persisted in Mongo (source of truth).
@@ -12,5 +12,5 @@ export async function saveBackendTimeline(
   timeline: CrmTimelineEvent[],
   baseIds: string[]
 ): Promise<JsonResult<CrmTimelineEvent[]>> {
-  return apiPut<CrmTimelineEvent[]>("/v1/crm/timeline", { items: timeline, baseIds });
+  return apiSend<CrmTimelineEvent[]>("PUT", "/v1/crm/timeline", { items: timeline, baseIds });
 }

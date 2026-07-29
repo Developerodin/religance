@@ -1,6 +1,6 @@
 "use client";
 
-import { apiGet, apiPut, type JsonResult } from "./api-client";
+import { apiGet, apiSend, type JsonResult } from "./api-client";
 import type { CrmEmailMeta } from "./types";
 
 // Per-user email overlay (lead links + star/read/archive/trash), persisted in
@@ -13,5 +13,5 @@ export async function saveBackendEmailMeta(
   meta: CrmEmailMeta[],
   baseIds: string[]
 ): Promise<JsonResult<CrmEmailMeta[]>> {
-  return apiPut<CrmEmailMeta[]>("/v1/crm/emails", { items: meta, baseIds });
+  return apiSend<CrmEmailMeta[]>("PUT", "/v1/crm/emails", { items: meta, baseIds });
 }

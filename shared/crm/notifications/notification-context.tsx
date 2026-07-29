@@ -20,7 +20,6 @@ import {
 const NOTIFICATION_POLL_INTERVAL_MS = 60_000;
 const BELL_DROPDOWN_LIMIT = 20;
 
-// Module-level bridge — CrmContext calls triggerNotificationRefresh() after scan/emit
 let notificationRefreshCallback: (() => Promise<void>) | null = null;
 
 export function registerNotificationRefresh(fn: () => Promise<void>): void {
@@ -38,8 +37,10 @@ type NotificationContextValue = {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  dismiss: (id: string) => Promise<boolean>;
-  dismissAndNavigate: (id: string, href: string) => Promise<boolean>;
+  removeNotification: (
+    id: string,
+    opts?: { navigate?: string }
+  ) => Promise<boolean>;
 };
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
@@ -99,11 +100,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(id);
   }, [refresh]);
 
-  const dismiss = useCallback(
-    async (id: string): Promise<boolean> => {
+  const removeNotification = useCallback(
+    async (id: string, opts?: { navigate?: string }): Promise<boolean> => {
       const target = items.find((n) => n.id === id);
-      // Await DELETE before optimistic UI — ensures dismissal recorded before CRM scan can run
-      const res = await deleteNotification(id, "dismiss");
+      const intent = opts?.navigate ? "navigate" : "dismiss";
+      const res = await deleteNotification(id, intent);
       if (!res.live) {
         void refresh();
         return false;
@@ -113,25 +114,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       if (target?.category === "activity") {
         setActivityTotal((prev) => Math.max(0, prev - 1));
       }
-      return true;
-    },
-    [items, refresh]
-  );
-
-  const dismissAndNavigate = useCallback(
-    async (id: string, href: string): Promise<boolean> => {
-      const target = items.find((n) => n.id === id);
-      const res = await deleteNotification(id, "navigate");
-      if (!res.live) {
-        void refresh();
-        return false;
+      if (opts?.navigate) {
+        router.push(opts.navigate);
       }
-      setItems((prev) => prev.filter((n) => n.id !== id));
-      setTotal((prev) => Math.max(0, prev - 1));
-      if (target?.category === "activity") {
-        setActivityTotal((prev) => Math.max(0, prev - 1));
-      }
-      router.push(href);
       return true;
     },
     [items, refresh, router]
@@ -145,10 +130,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       refresh,
-      dismiss,
-      dismissAndNavigate,
+      removeNotification,
     }),
-    [items, total, activityTotal, loading, error, refresh, dismiss, dismissAndNavigate]
+    [items, total, activityTotal, loading, error, refresh, removeNotification]
   );
 
   return (

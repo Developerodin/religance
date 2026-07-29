@@ -1,6 +1,6 @@
 "use client";
 
-import { apiGet, apiPut, type JsonResult } from "./api-client";
+import { apiGet, apiSend, type JsonResult } from "./api-client";
 import type { EmailTemplate } from "./email-templates";
 
 // Per-user email templates, persisted in Mongo (source of truth).
@@ -13,5 +13,5 @@ export async function getBackendEmailTemplates(): Promise<
 export async function saveBackendEmailTemplates(
   templates: EmailTemplate[]
 ): Promise<JsonResult<EmailTemplate[]>> {
-  return apiPut<EmailTemplate[]>("/v1/email/templates", { templates });
+  return apiSend<EmailTemplate[]>("PUT", "/v1/email/templates", { templates });
 }

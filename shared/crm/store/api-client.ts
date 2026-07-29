@@ -37,11 +37,6 @@ function normalizeFetchError(err: unknown): string {
   return err instanceof Error ? err.message : "Network request failed";
 }
 
-/**
- * An expired or invalid token must send the user to the login page. Without this,
- * a 401 becomes {live:false}, which the CRM store reads as "the server says you
- * have no data" — an empty CRM with no explanation.
- */
 function handleUnauthorized(status: number): boolean {
   if (status !== 401) return false;
   logout();
@@ -70,13 +65,8 @@ export async function apiGet<T>(path: string): Promise<JsonResult<T>> {
   }
 }
 
-/**
- * Per-item writes (POST / PATCH / DELETE). Lives here rather than in outlook-api
- * so it inherits handleUnauthorized — outlook-api's own postJson has no 401
- * handling, so a write through it would silently fail on an expired session.
- */
 export async function apiSend<T>(
-  method: "POST" | "PATCH" | "DELETE",
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   payload?: unknown
 ): Promise<JsonResult<T>> {
@@ -95,33 +85,7 @@ export async function apiSend<T>(
         (body as { error?: string }).error ?? `Request failed (${res.status})`;
       return { live: false, error: message };
     }
-    // DELETE returns 204 with no body.
     if (res.status === 204) return { live: true, data: undefined as T };
-    return { live: true, data: (await res.json()) as T };
-  } catch (err) {
-    return { live: false, error: normalizeFetchError(err) };
-  }
-}
-
-export async function apiPut<T>(
-  path: string,
-  payload: unknown
-): Promise<JsonResult<T>> {
-  try {
-    const res = await fetchWithTimeout(`${BACKEND_BASE}${path}`, {
-      method: "PUT",
-      headers: authHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      if (handleUnauthorized(res.status)) {
-        return { live: false, error: "Session expired. Please sign in again." };
-      }
-      const body = await res.json().catch(() => ({}));
-      const message =
-        (body as { error?: string }).error ?? `Request failed (${res.status})`;
-      return { live: false, error: message };
-    }
     return { live: true, data: (await res.json()) as T };
   } catch (err) {
     return { live: false, error: normalizeFetchError(err) };

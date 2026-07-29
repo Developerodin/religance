@@ -91,6 +91,7 @@ import { getBackendQuotations, saveBackendQuotations } from "./quotations-api";
 import { getBackendFollowUps, saveBackendFollowUps } from "./follow-ups-api";
 import {
   deleteNotificationByDedupeKey,
+  postInboundEmailNotification,
   postNotification,
   postNotificationScan,
 } from "@/shared/crm/notifications/notifications-api";
@@ -2204,17 +2205,12 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         // First sync: seed snapshot only — no flood of historical inbox
         if (isFirstSync) {
           if (arrivedDuringSync) {
-            await postNotification({
-              type: "inbound_email",
-              dedupeKey: `inbound_email:${threadId}`,
-              title: `New email: ${email.subject}`,
-              body: `From ${email.fromEmail}`,
-              href: `/inbox?email=outlook-${threadId}`,
-              meta: {
-                threadId,
-                messageId: email.messageId ?? undefined,
-                sentAt: email.sentAt,
-              },
+            await postInboundEmailNotification({
+              threadId,
+              subject: email.subject,
+              fromEmail: email.fromEmail,
+              messageId: email.messageId ?? undefined,
+              sentAt: email.sentAt,
             });
             didEmit = true;
           }
@@ -2222,17 +2218,12 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         }
 
         if (isNewThread || isNewMessage) {
-          await postNotification({
-            type: "inbound_email",
-            dedupeKey: `inbound_email:${threadId}`,
-            title: `New email: ${email.subject}`,
-            body: `From ${email.fromEmail}`,
-            href: `/inbox?email=outlook-${threadId}`,
-            meta: {
-              threadId,
-              messageId: email.messageId ?? undefined,
-              sentAt: email.sentAt,
-            },
+          await postInboundEmailNotification({
+            threadId,
+            subject: email.subject,
+            fromEmail: email.fromEmail,
+            messageId: email.messageId ?? undefined,
+            sentAt: email.sentAt,
           });
           didEmit = true;
         }

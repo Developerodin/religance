@@ -1,10 +1,10 @@
 "use client";
 
 import { getToken } from "@/shared/auth/auth-client";
+import { apiGet, apiSend, type JsonResult } from "./api-client";
 
 const BACKEND_BASE =
   process.env.NEXT_PUBLIC_RELIGENCE_BACKEND_URL ?? "http://localhost:4000";
-const REQUEST_TIMEOUT_MS = 12000;
 
 function authHeaders(): HeadersInit {
   return {
@@ -60,98 +60,20 @@ export type OutlookThread = {
   }>;
 };
 
-type JsonResult<T> = { live: true; data: T } | { live: false; error: string };
-
-async function fetchWithTimeout(
-  input: string,
-  init: RequestInit
-): Promise<Response> {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    return await fetch(input, {
-      ...init,
-      signal: controller.signal,
-    });
-  } finally {
-    window.clearTimeout(timer);
-  }
-}
-
-function normalizeFetchError(err: unknown): string {
-  if (err instanceof DOMException && err.name === "AbortError") {
-    return "Request timed out. Please try again.";
-  }
-  return err instanceof Error ? err.message : "Network request failed";
-}
-
-async function getJson<T>(path: string): Promise<JsonResult<T>> {
-  try {
-    const res = await fetchWithTimeout(`${BACKEND_BASE}${path}`, {
-      headers: authHeaders(),
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      const message =
-        (body as { error?: string }).error ?? `Request failed (${res.status})`;
-      return { live: false, error: message };
-    }
-    const data = (await res.json()) as T;
-    return { live: true, data };
-  } catch (err) {
-    return {
-      live: false,
-      error: normalizeFetchError(err),
-    };
-  }
-}
-
-async function postJson<T>(
-  path: string,
-  payload: unknown,
-  method: "POST" | "PATCH" | "DELETE" = "POST"
-): Promise<JsonResult<T>> {
-  try {
-    const res = await fetchWithTimeout(`${BACKEND_BASE}${path}`, {
-      method,
-      headers: authHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      const message =
-        (body as { error?: string }).error ?? `Request failed (${res.status})`;
-      return { live: false, error: message };
-    }
-    if (res.status === 204) {
-      return { live: true, data: undefined as T };
-    }
-    const data = (await res.json()) as T;
-    return { live: true, data };
-  } catch (err) {
-    return {
-      live: false,
-      error: normalizeFetchError(err),
-    };
-  }
-}
-
 export async function fetchOutlookConnectUrl(): Promise<JsonResult<{ url: string }>> {
-  return getJson<{ url: string }>("/v1/email/auth/microsoft");
+  return apiGet<{ url: string }>("/v1/email/auth/microsoft");
 }
 
 export async function listOutlookAccounts(): Promise<JsonResult<OutlookAccount[]>> {
-  return getJson<OutlookAccount[]>("/v1/email/accounts");
+  return apiGet<OutlookAccount[]>("/v1/email/accounts");
 }
 
 export async function disconnectOutlookAccount(
   accountId: string
 ): Promise<JsonResult<{ success: boolean }>> {
-  return postJson<{ success: boolean }>(
-    `/v1/email/accounts/${encodeURIComponent(accountId)}`,
-    {},
-    "DELETE"
+  return apiSend<{ success: boolean }>(
+    "DELETE",
+    `/v1/email/accounts/${encodeURIComponent(accountId)}`
   );
 }
 
@@ -171,9 +93,8 @@ export async function listOutlookThreads(
   if (pageToken?.trim()) {
     params.set("pageToken", pageToken.trim());
   }
-  const qs = params.toString();
-  return getJson<{ threads: OutlookThreadItem[]; nextPageToken: string | null }>(
-    `/v1/email/threads?${qs}`
+  return apiGet<{ threads: OutlookThreadItem[]; nextPageToken: string | null }>(
+    `/v1/email/threads?${params.toString()}`
   );
 }
 
@@ -182,7 +103,7 @@ export async function getOutlookThread(
   threadId: string
 ): Promise<JsonResult<OutlookThread>> {
   const qs = new URLSearchParams({ accountId }).toString();
-  return getJson<OutlookThread>(
+  return apiGet<OutlookThread>(
     `/v1/email/threads/${encodeURIComponent(threadId)}?${qs}`
   );
 }
@@ -193,10 +114,10 @@ export async function sendOutlookMessage(input: {
   subject: string;
   html: string;
 }): Promise<JsonResult<{ id: string | null; threadId?: string | null }>> {
-  return postJson<{ id: string | null; threadId?: string | null }>(
+  return apiSend<{ id: string | null; threadId?: string | null }>(
+    "POST",
     "/v1/email/messages/send",
-    input,
-    "POST"
+    input
   );
 }
 
@@ -205,7 +126,8 @@ export async function replyOutlookMessage(input: {
   messageId: string;
   html: string;
 }): Promise<JsonResult<{ id: string | null; threadId?: string | null }>> {
-  return postJson(
+  return apiSend(
+    "POST",
     `/v1/email/messages/${encodeURIComponent(input.messageId)}/reply`,
     { accountId: input.accountId, html: input.html }
   );
@@ -216,7 +138,8 @@ export async function replyAllOutlookMessage(input: {
   messageId: string;
   html: string;
 }): Promise<JsonResult<{ id: string | null; threadId?: string | null }>> {
-  return postJson(
+  return apiSend(
+    "POST",
     `/v1/email/messages/${encodeURIComponent(input.messageId)}/reply-all`,
     { accountId: input.accountId, html: input.html }
   );
@@ -228,7 +151,8 @@ export async function forwardOutlookMessage(input: {
   to: string;
   html: string;
 }): Promise<JsonResult<{ id: string | null; threadId?: string | null }>> {
-  return postJson(
+  return apiSend(
+    "POST",
     `/v1/email/messages/${encodeURIComponent(input.messageId)}/forward`,
     { accountId: input.accountId, to: input.to, html: input.html }
   );
@@ -240,21 +164,16 @@ export async function batchModifyOutlookThreads(input: {
   addLabelIds?: string[];
   removeLabelIds?: string[];
 }): Promise<JsonResult<{ success: boolean; modified: number }>> {
-  return postJson("/v1/email/threads/batch-modify", input);
+  return apiSend("POST", "/v1/email/threads/batch-modify", input);
 }
 
 export async function trashOutlookThreads(input: {
   accountId: string;
   threadIds: string[];
 }): Promise<JsonResult<{ success: boolean }>> {
-  return postJson("/v1/email/threads/trash", input);
+  return apiSend("POST", "/v1/email/threads/trash", input);
 }
 
-/**
- * Fetches the attachment with the auth header (a plain <a href> can't send
- * one) and hands it to the browser as a download. Returns an error message
- * or null. No request timeout — large attachments legitimately take a while.
- */
 export async function downloadOutlookAttachment(input: {
   accountId: string;
   messageId: string;
@@ -343,7 +262,7 @@ export async function listBackendMasterData(
   reload = false
 ): Promise<JsonResult<BackendMasterData>> {
   const query = reload ? "?reload=true" : "";
-  return getJson<BackendMasterData>(`/v1/master-data${query}`);
+  return apiGet<BackendMasterData>(`/v1/master-data${query}`);
 }
 
 export type BuyerImportResult = {
@@ -354,16 +273,11 @@ export type BuyerImportResult = {
   medicines: number;
 };
 
-/**
- * Upload one buyer-master workbook (the shape of the files in /Excel). The
- * backend parses it into buyers + derived salts + medicines and upserts all
- * three. Body is the raw file bytes; filename rides in the query string.
- */
 export async function importBuyerExcel(
   file: File
 ): Promise<JsonResult<BuyerImportResult>> {
   try {
-    const res = await fetchWithTimeout(
+    const res = await fetch(
       `${BACKEND_BASE}/v1/master-data/import?filename=${encodeURIComponent(
         file.name
       )}`,
@@ -384,11 +298,9 @@ export async function importBuyerExcel(
     }
     return { live: true, data: (await res.json()) as BuyerImportResult };
   } catch (err) {
-    return { live: false, error: normalizeFetchError(err) };
+    return {
+      live: false,
+      error: err instanceof Error ? err.message : "Import failed",
+    };
   }
 }
-
-
-
-
-
