@@ -66,6 +66,26 @@ export function writeInboxCache(
   }
 }
 
+/** First non-empty cache row for userId — used to paint inbox before async sync. */
+export function findInboxCacheForUser(
+  userId: string
+): (InboxCacheSnapshot & { accountId: string }) | null {
+  if (typeof window === "undefined" || !userId) return null;
+  const prefix = `${CACHE_PREFIX}:${userId}:`;
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (!key?.startsWith(prefix)) continue;
+      const accountId = key.slice(prefix.length);
+      const snapshot = readInboxCache(userId, accountId);
+      if (snapshot?.emails.length) return { ...snapshot, accountId };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export function purgeInboxCache(userId?: string | null, accountId?: string | null): void {
   if (typeof window === "undefined") return;
   try {

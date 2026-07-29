@@ -88,6 +88,7 @@ import {
   trashOutlookThreads,
 } from "./outlook-api";
 import {
+  findInboxCacheForUser,
   purgeInboxCache,
   readInboxCache,
   writeInboxCache,
@@ -2600,7 +2601,25 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       options?: OutlookSyncOptions
     ) => {
       const background = options?.background ?? false;
-      if (outlookSyncInFlightRef.current) return;
+      const userId = authUserRef.current;
+
+      if (outlookSyncInFlightRef.current) {
+        // ponytail: remount while sync in-flight used to skip sync AND miss cache
+        if (!background && userId) {
+          const hit = findInboxCacheForUser(userId);
+          if (hit) {
+            patch((prev) =>
+              prev.emails.length > 0
+                ? prev
+                : {
+                    ...prev,
+                    emails: applyEmailMeta(hit.emails, prev.emailMeta),
+                  }
+            );
+          }
+        }
+        return;
+      }
 
       outlookSyncInFlightRef.current = true;
       if (!background) setOutlookInboxSyncing(true);
@@ -2608,7 +2627,6 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
       const seq = ++outlookSyncSeqRef.current;
       const isStale = () => seq !== outlookSyncSeqRef.current;
-      const userId = authUserRef.current;
 
       let accountEmail = "";
       try {
@@ -2647,7 +2665,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
         accountEmail = account.email;
         const normalizedAccountEmail = account.email.toLowerCase();
-        const accountSwitched = account.id !== outlookAccountIdRef.current;
+        const previousAccountId = outlookAccountIdRef.current;
+        // null ref on remount is not a mailbox switch — was misread as one and purged cache
+        const accountSwitched =
+          previousAccountId != null && account.id !== previousAccountId;
 
         if (account.status !== "active") {
           patch((prev) => ({
@@ -2668,7 +2689,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         }
 
         if (accountSwitched) {
-          purgeInboxCache(userId, outlookAccountIdRef.current ?? undefined);
+          purgeInboxCache(userId, previousAccountId);
         }
 
         const cached =
@@ -2920,9 +2941,23 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated || !authUserId) return;
+    const hit = findInboxCacheForUser(authUserId);
+    if (hit) {
+      patch((prev) =>
+        prev.emails.length > 0
+          ? prev
+          : {
+              ...prev,
+              emails: applyEmailMeta(hit.emails, prev.emailMeta),
+            }
+      );
+      setInboxFolderPagination(hit.folderPagination);
+      setOutlookInboxLastSyncedAt(hit.lastSyncedAt);
+      setOutlookInboxBootstrapping(false);
+    }
     void syncOutlookInboxRef.current(null, null);
     // ponytail: ref not callback — pagination updates used to recreate this fn and re-bootstrap in a loop
-  }, [hydrated, authUserId]);
+  }, [hydrated, authUserId, patch]);
 
   useEffect(() => {
     if (
@@ -3041,7 +3076,8 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       const folderState = folderSyncStateRef.current[stateKey];
       if (
         folderState &&
-        Date.now() - folderState.loadedAt < FOLDER_STALE_MS
+        Date.now() - folderState.loadedAt < FOLDER_STALE_MS &&
+        state.emails.length > 0
       ) {
         return;
       }
@@ -3087,7 +3123,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         };
       });
     },
-    [patch, state.outlookEmail]
+    [patch, state.emails.length, state.outlookEmail]
   );
 
   const switchOutlookAccount = useCallback(
