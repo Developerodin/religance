@@ -10,6 +10,7 @@ import BrandLogo from '@/shared/layout-components/brand-logo/brand-logo';
 import { CRM_HOME_PATH } from '@/shared/layout-components/sidebar/nav';
 import { getUser, logout } from '@/shared/auth/auth-client';
 import { useRouter } from 'next/navigation';
+import { useNotifications } from "@/shared/crm/notifications/notification-context";
 
 const Header = ({ local_varaiable, ThemeChanger }:any) => {
 
@@ -32,30 +33,39 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
   const isDark = local_varaiable.class === "dark";
   const toggleTheme = () => (isDark ? Light : Dark)(ThemeChanger);
 
-  //Notifications
+  const {
+    items: notifications,
+    total,
+    activityTotal,
+    loading,
+    error,
+    dismiss,
+    dismissAndNavigate,
+  } = useNotifications();
 
-  const span1 = <span className="text-warning">ID: #1116773</span>
-  const span2 = <span className="text-success">ID: 7731116</span>
+  const showBadge = !loading && !error && total > 0;
 
- const span3 = <span className="font-[600] py-[0.25rem] px-[0.45rem] rounded-[0.25rem] bg-pinkmain/10 text-pinkmain text-[0.625rem]">Free shipping</span>
+  const iconColorForCategory = (category: "action" | "activity") =>
+    category === "action"
+      ? { bg: "!bg-primary/10", text: "primary" }
+      : { bg: "!bg-secondary/10", text: "secondary" };
 
- const notifydata = [
-  { id: 1, class: "Your Order Has Been Shipped", data: "Order No: 123456 Has Shipped To Your Delivery Address", icon: "gift", class2: "", color: "!bg-primary/10",color2: "primary"},
-  { id: 2, class: "Discount Available", data: "Discount Available On Selected Products", icon: "discount-2", class2: "", color: "!bg-secondary/10",color2:"secondary" },
-  { id: 3, class: "Account Has Been Verified", data: "Your Account Has Been Verified Sucessfully", icon: "user-check", class2: "", color: "!bg-pinkmain/10",color2: "pink"},
-  { id: 4, class: "Order Placed", data: "Order Placed Successfully", icon: "circle-check", class2: span1, color: "!bg-warning/10",color2: "warning"},
-  { id: 5, class: "Order Delayed", data: "Order Delayed Unfortunately", icon: "clock", class2: span2, color: "!bg-success/10",color2: "success"},
-]
+  const handleNotificationClose = (
+    id: string,
+    event: React.MouseEvent<HTMLAnchorElement, MouseEvent>
+  ) => {
+    event.stopPropagation();
+    event.preventDefault();
+    void dismiss(id);
+  };
 
-  const [notifications, setNotifications] = useState([...notifydata]);
-
-  const handleNotificationClose = (index: number,event: React.MouseEvent<HTMLAnchorElement, MouseEvent>) => {
-    if (event) {
-      event.stopPropagation();
-    }
-    const updatedNotifications = [...notifications];
-    updatedNotifications.splice(index, 1);
-    setNotifications(updatedNotifications);
+  const handleNotificationClick = (
+    id: string,
+    href: string,
+    event: React.MouseEvent<HTMLAnchorElement, MouseEvent>
+  ) => {
+    event.preventDefault();
+    void dismissAndNavigate(id, href);
   };
 
   //full screen
@@ -325,11 +335,13 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
                   className="hs-dropdown-toggle relative ti-dropdown-toggle !p-0 !border-0 flex-shrink-0  !rounded-full !shadow-none align-middle text-xs">
                   <i className="bx bx-bell header-link-icon  text-[1.125rem]"></i>
                   <span className="flex absolute h-5 w-5 -top-[0.25rem] end-0  -me-[0.6rem]">
+                    {showBadge ? (
+                      <span
+                        className="animate-slow-ping absolute inline-flex -top-[2px] -start-[2px] h-full w-full rounded-full bg-secondary/40 opacity-75"></span>
+                    ) : null}
                     <span
-                      className="animate-slow-ping absolute inline-flex -top-[2px] -start-[2px] h-full w-full rounded-full bg-secondary/40 opacity-75"></span>
-                    <span
-                      className="relative inline-flex justify-center items-center rounded-full  h-[14.7px] w-[14px] bg-secondary text-[0.625rem] text-white"
-                      id="notification-icon-badge">{notifications.length}</span>
+                      className={`relative inline-flex justify-center items-center rounded-full h-[14.7px] w-[14px] bg-secondary text-[0.625rem] text-white ${showBadge ? "" : "hidden"}`}
+                      id="notification-icon-badge">{total}</span>
                   </span>
                 </button>
                 <div className="main-header-dropdown !-mt-3 !p-0 hs-dropdown-menu ti-dropdown-menu bg-white !w-[22rem] border-0 border-defaultborder hidden !m-0"
@@ -338,40 +350,68 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
                   <div className="ti-dropdown-header !m-0 !p-4 !bg-transparent flex justify-between items-center">
                     <p className="mb-0 text-[1.0625rem] text-defaulttextcolor font-semibold ">Notifications</p>
                     <span className="text-[0.75em] py-[0.25rem/2] px-[0.45rem] font-[600] rounded-sm bg-secondary/10 text-secondary"
-                      id="notifiation-data">{`${notifications.length} Unread`}</span>
+                      id="notifiation-data">{`${total} Unread`}</span>
                   </div>
                   <div className="dropdown-divider"></div>
                   <ul className="list-none !m-0 !p-0 end-0" id="header-notification-scroll">
-                  {notifications.map((idx, index) => (
-                      <li className="ti-dropdown-item dropdown-item" key={Math.random()}>
+                  {notifications.map((item) => {
+                    const colors = iconColorForCategory(item.category);
+                    return (
+                      <li className="ti-dropdown-item dropdown-item" key={item.id}>
                         <div className="flex items-start">
                           <div className="pe-2">
                             <span
-                              className={`inline-flex text-${idx.color2} justify-center items-center !w-[2.5rem] !h-[2.5rem] !leading-[2.5rem] !text-[0.8rem] ${idx.color} !rounded-[50%]`}><i
-                                className={`ti ti-${idx.icon} text-[1.125rem]`}></i></span>
+                              className={`inline-flex text-${colors.text} justify-center items-center !w-[2.5rem] !h-[2.5rem] !leading-[2.5rem] !text-[0.8rem] ${colors.bg} !rounded-[50%]`}>
+                              <i className={`ti ti-${item.icon} text-[1.125rem]`}></i>
+                            </span>
                           </div>
                           <div className="grow flex items-center justify-between">
                             <div>
-                              <p className="mb-0 text-defaulttextcolor dark:text-white text-[0.8125rem] font-semibold"><Link
-                                href="#!">{idx.class} {idx.class2}</Link></p>
-                              <span className="text-[#8c9097] dark:text-white/50 font-normal text-[0.75rem] header-notification-text">{idx.data}</span>
+                              <p className="mb-0 text-defaulttextcolor dark:text-white text-[0.8125rem] font-semibold">
+                                <Link
+                                  href={item.href}
+                                  scroll={false}
+                                  onClick={(event) =>
+                                    handleNotificationClick(item.id, item.href, event)
+                                  }>
+                                  {item.title}
+                                </Link>
+                              </p>
+                              <span className="text-[#8c9097] dark:text-white/50 font-normal text-[0.75rem] header-notification-text">
+                                {item.body}
+                              </span>
                             </div>
                             <div>
-                              <Link aria-label="anchor" href="#!" scroll={false} className="min-w-fit text-[#8c9097] dark:text-white/50 me-1 dropdown-item-close1" onClick={(event) => handleNotificationClose(index, event)}><i
-                                className="ti ti-x text-[1rem]"></i></Link>
+                              <Link
+                                aria-label="Dismiss notification"
+                                href="#!"
+                                scroll={false}
+                                className="min-w-fit text-[#8c9097] dark:text-white/50 me-1 dropdown-item-close1"
+                                onClick={(event) => handleNotificationClose(item.id, event)}>
+                                <i className="ti ti-x text-[1rem]"></i>
+                              </Link>
                             </div>
                           </div>
                         </div>
                       </li>
-                    ))}
+                    );
+                  })}
                   </ul>
 
-                  <div className={`p-4 empty-header-item1 border-t mt-2 ${notifications.length === 0 ? 'hidden' : 'block'}`}>
-                    <div className="grid">
-                      <Link href="#!" className="ti-btn ti-btn-primary-full !m-0 w-full p-2">View All</Link>
-                    </div>
+                  <div className={`p-4 empty-header-item1 border-t mt-2 ${notifications.length === 0 ? "hidden" : "block"}`}>
+                    {activityTotal > 0 ? (
+                      <div className="grid">
+                        <Link href="/notifications" className="ti-btn ti-btn-primary-full !m-0 w-full p-2">
+                          View All
+                        </Link>
+                      </div>
+                    ) : total > 0 ? (
+                      <p className="mb-0 text-center text-[0.75rem] text-[#8c9097] dark:text-white/50">
+                        Action items above
+                      </p>
+                    ) : null}
                   </div>
-                  <div className={`p-[3rem] empty-item1 ${notifications.length === 0 ? 'block' : 'hidden'}`}>
+                  <div className={`p-[3rem] empty-item1 ${total === 0 ? "block" : "hidden"}`}>
                     <div className="text-center">
                       <span className="!h-[4rem]  !w-[4rem] avatar !leading-[4rem] !rounded-full !bg-secondary/10 !text-secondary">
                         <i className="ri-notification-off-line text-[2rem]  "></i>
