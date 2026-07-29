@@ -2,6 +2,7 @@
 import PrelineScript from "@/app/PrelineScript"
 import { isAuthed } from "@/shared/auth/auth-client"
 import { CrmProvider } from "@/shared/crm/store/crm-context"
+import { NotificationProvider } from "@/shared/crm/notifications/notification-context"
 import Backtotop from "@/shared/layout-components/backtotop/backtotop"
 import Footer from "@/shared/layout-components/footer/footer"
 import Header from "@/shared/layout-components/header/header"
@@ -48,7 +49,9 @@ const Layout = ({children,}:any) => {
 
     <Fragment>
 <div className='page'>
-        <Header/>
+        <NotificationProvider>
+          <Header/>
+        </NotificationProvider>
         <Sidebar/>
         <div className='content'>
           <div className='main-content'  
