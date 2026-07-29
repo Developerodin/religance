@@ -15,7 +15,7 @@ export function createInitialCrmState(): CrmState {
     emails: [],
     emailMeta: [],
     timeline: [],
-    gmailConnected: false,
+    outlookConnected: false,
     outlookAccountId: null,
     outlookEmail: null,
     outlookAccounts: [],

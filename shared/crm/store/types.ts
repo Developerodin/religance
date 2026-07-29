@@ -289,7 +289,7 @@ export type CrmState = {
   /** Persisted overlay for `emails` (which are re-fetched from Graph, not stored). */
   emailMeta: CrmEmailMeta[];
   timeline: CrmTimelineEvent[];
-  gmailConnected: boolean;
+  outlookConnected: boolean;
   outlookAccountId?: string | null;
   outlookEmail?: string | null;
   outlookAccounts?: OutlookMailboxAccount[];

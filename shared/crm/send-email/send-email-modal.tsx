@@ -28,8 +28,8 @@ export function SendEmailModal({ target, onClose }: SendEmailModalProps) {
     emailTemplates,
     sendCrmEmail,
     syncOutlookInbox,
-    gmailConnected,
-    connectGmail,
+    outlookConnected,
+    connectOutlook,
     outlookAccountId,
     outlookEmail,
     setPendingComposeLeadId,
@@ -88,7 +88,7 @@ export function SendEmailModal({ target, onClose }: SendEmailModalProps) {
   const handleConnect = async () => {
     setBusy(true);
     try {
-      await connectGmail();
+      await connectOutlook();
     } finally {
       setBusy(false);
     }
@@ -96,7 +96,7 @@ export function SendEmailModal({ target, onClose }: SendEmailModalProps) {
 
   const handleSend = async () => {
     if (!canSend || busy) return;
-    if (!gmailConnected) {
+    if (!outlookConnected) {
       await handleConnect();
       return;
     }
@@ -158,7 +158,7 @@ export function SendEmailModal({ target, onClose }: SendEmailModalProps) {
         </header>
 
         <div className="send-email-overlay__body">
-          {!gmailConnected && (
+          {!outlookConnected && (
             <div className="send-email-overlay__notice" role="status">
               <span className="send-email-overlay__notice-icon" aria-hidden>
                 <i className="ri-mail-settings-line" />
@@ -262,7 +262,7 @@ export function SendEmailModal({ target, onClose }: SendEmailModalProps) {
             Cancel
           </button>
 
-          {!gmailConnected ? (
+          {!outlookConnected ? (
             <button
               type="button"
               className="ti-btn ti-btn-primary send-email-overlay__btn send-email-overlay__btn--primary"

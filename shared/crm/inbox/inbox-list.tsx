@@ -30,7 +30,7 @@ export type InboxRowMeta = {
 };
 
 export function InboxListPanel({
-  gmailConnected,
+  outlookConnected,
   onConnect,
   activeFolder,
   searchQuery,
@@ -58,7 +58,7 @@ export function InboxListPanel({
   onBulkUnarchive,
   onBulkDelete,
 }: {
-  gmailConnected: boolean;
+  outlookConnected: boolean;
   onConnect: () => void;
   loading?: boolean;
   activeFolder: InboxFolderName;
@@ -146,7 +146,7 @@ export function InboxListPanel({
             aria-label="Select all"
           />
           <h2 className="crm-inbox-list-folder-title">{activeFolder}</h2>
-          {gmailConnected && (syncing || lastSyncedAt || onRefresh) ? (
+          {outlookConnected && (syncing || lastSyncedAt || onRefresh) ? (
             <div className="crm-inbox-list-sync-meta">
               {syncing ? (
                 <span className="crm-inbox-sync-status" aria-live="polite">
@@ -201,7 +201,7 @@ export function InboxListPanel({
       </div>
 
       <div className="crm-inbox-list-scroll">
-        {!gmailConnected ? (
+        {!outlookConnected ? (
           <InboxEmptyState
             icon="ri-mail-lock-line"
             title="Connect your inbox"

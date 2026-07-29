@@ -10,10 +10,10 @@ export const INBOX_TAG_COLORS: Record<InboxTag, string> = {
 };
 
 export const INBOX_TAG_LABELS: Record<InboxTag, string> = {
-  lead: "Promotion",
-  unlinked: "Personal",
-  internal: "Social",
-  finance: "Promotion",
+  lead: "Linked leads",
+  unlinked: "Unlinked",
+  internal: "Internal",
+  finance: "Billing",
 };
 
 export const INBOX_LIST_TAG_CLASS: Record<InboxTag, string> = {
