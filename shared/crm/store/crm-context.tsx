@@ -304,14 +304,19 @@ function emailListFingerprint(email: CrmEmail): string {
 }
 
 function preferSyncedEmailRow(a: CrmEmail, b: CrmEmail): CrmEmail {
-  if (isLocalOnlyCrmEmail(a) && !isLocalOnlyCrmEmail(b)) return b;
-  if (isLocalOnlyCrmEmail(b) && !isLocalOnlyCrmEmail(a)) return a;
-  const aTimed = a.sentAt.includes("T");
-  const bTimed = b.sentAt.includes("T");
-  if (aTimed !== bTimed) return aTimed ? a : b;
-  if (a.messageId && !b.messageId) return a;
-  if (b.messageId && !a.messageId) return b;
-  return a.sentAt.localeCompare(b.sentAt) >= 0 ? a : b;
+  let pick: CrmEmail;
+  if (isLocalOnlyCrmEmail(a) && !isLocalOnlyCrmEmail(b)) pick = b;
+  else if (isLocalOnlyCrmEmail(b) && !isLocalOnlyCrmEmail(a)) pick = a;
+  else {
+    const aTimed = a.sentAt.includes("T");
+    const bTimed = b.sentAt.includes("T");
+    if (aTimed !== bTimed) pick = aTimed ? a : b;
+    else if (a.messageId && !b.messageId) pick = a;
+    else if (b.messageId && !a.messageId) pick = b;
+    else pick = a.sentAt.localeCompare(b.sentAt) >= 0 ? a : b;
+  }
+  const other = pick === a ? b : a;
+  return other.leadId && !pick.leadId ? { ...pick, leadId: other.leadId } : pick;
 }
 
 function mergeEmailMeta(a: CrmEmailMeta, b: CrmEmailMeta): CrmEmailMeta {
@@ -504,11 +509,47 @@ if (process.env.NODE_ENV === "development") {
 
 function applyEmailMeta(emails: CrmEmail[], meta: CrmEmailMeta[]): CrmEmail[] {
   if (!meta.length) return emails;
-  const byId = new Map(meta.map((m) => [m.id, m]));
   return emails.map((e) => {
-    const m = byId.get(e.id);
+    const m = findEmailMeta(e, meta);
     return m ? { ...e, leadId: m.leadId } : e;
   });
+}
+
+// ponytail: dev-only — meta keyed by outlook-{threadId} must apply after id drift.
+function assertApplyEmailMetaThreadFallback(): void {
+  const meta: CrmEmailMeta[] = [
+    {
+      id: "outlook-threadA",
+      leadId: "lead-1",
+      starred: false,
+      read: false,
+      archived: false,
+      trashed: false,
+    },
+  ];
+  const applied = applyEmailMeta(
+    [
+      {
+        id: "outlook-threadB",
+        leadId: null,
+        threadId: "threadA",
+        direction: "inbound",
+        subject: "Re: test",
+        body: "",
+        preview: "",
+        fromEmail: "a@b.com",
+        toEmail: "me@co.com",
+        sentAt: "2026-07-29T10:00:00Z",
+      },
+    ],
+    meta
+  );
+  if (applied[0]?.leadId !== "lead-1") {
+    throw new Error("applyEmailMeta thread fallback failed");
+  }
+}
+if (process.env.NODE_ENV === "development") {
+  assertApplyEmailMetaThreadFallback();
 }
 
 function upsertEmailMeta(
@@ -2042,13 +2083,12 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           replyStages.includes(lead.stage)
             ? "Replied"
             : lead.stage;
+        const emailMeta = upsertEmailMeta(prev.emailMeta, emailId, { leadId });
         return {
           ...prev,
-          emails: prev.emails.map((e) =>
-            e.id === emailId ? { ...e, leadId } : e
-          ),
           // The link is CRM-owned: persist it, or the next Outlook sync drops it.
-          emailMeta: upsertEmailMeta(prev.emailMeta, emailId, { leadId }),
+          emailMeta,
+          emails: applyEmailMeta(prev.emails, emailMeta),
           leads: prev.leads.map((l) =>
             l.id === leadId
               ? { ...l, stage: newStage, lastActivity: todayIso() }
@@ -2075,13 +2115,17 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     (emailId: string) => {
       patch((prev) => {
         const email = prev.emails.find((e) => e.id === emailId);
-        if (!email?.leadId) return prev;
+        const linked =
+          email?.leadId ??
+          (email ? findEmailMeta(email, prev.emailMeta)?.leadId : null);
+        if (!linked) return prev;
+        const emailMeta = upsertEmailMeta(prev.emailMeta, emailId, {
+          leadId: null,
+        });
         return {
           ...prev,
-          emails: prev.emails.map((e) =>
-            e.id === emailId ? { ...e, leadId: null } : e
-          ),
-          emailMeta: upsertEmailMeta(prev.emailMeta, emailId, { leadId: null }),
+          emailMeta,
+          emails: applyEmailMeta(prev.emails, emailMeta),
         };
       });
     },
