@@ -116,34 +116,49 @@ export function ConfirmDeleteOverlay({
           >
             Cancel
           </Button>
-          <Button
-            variant={resolvedConfirmVariant}
-            size="md"
-            className={`confirm-delete-overlay__btn${
-              resolvedConfirmVariant === "danger"
-                ? " confirm-delete-overlay__btn--danger"
-                : ""
-            }`}
-            onClick={onConfirm}
-            disabled={busy}
-          >
-            {busy ? (
-              <>
-                <span
-                  className="confirm-delete-overlay__spinner"
-                  aria-hidden
-                />
-                {resolvedConfirmVariant === "danger" ? "Deleting…" : "Working…"}
-              </>
-            ) : (
-              <>
-                {resolvedConfirmVariant === "danger" ? (
+          {/* ponytail: raw *-full — Button danger/primary are soft (bg/10) */}
+          {resolvedConfirmVariant === "danger" ? (
+            <button
+              type="button"
+              className="ti-btn ti-btn-danger-full crm-btn crm-btn--md confirm-delete-overlay__btn confirm-delete-overlay__btn--danger"
+              onClick={onConfirm}
+              disabled={busy}
+            >
+              {busy ? (
+                <>
+                  <span
+                    className="confirm-delete-overlay__spinner"
+                    aria-hidden
+                  />
+                  Deleting…
+                </>
+              ) : (
+                <>
                   <i className="ri-delete-bin-line me-1" aria-hidden />
-                ) : null}
-                {confirmLabel}
-              </>
-            )}
-          </Button>
+                  {confirmLabel}
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="ti-btn ti-btn-primary-full crm-btn crm-btn--md confirm-delete-overlay__btn"
+              onClick={onConfirm}
+              disabled={busy}
+            >
+              {busy ? (
+                <>
+                  <span
+                    className="confirm-delete-overlay__spinner"
+                    aria-hidden
+                  />
+                  Working…
+                </>
+              ) : (
+                confirmLabel
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>,

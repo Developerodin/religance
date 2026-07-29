@@ -188,6 +188,18 @@ export type CrmFollowUp = {
   createdAt: string;
 };
 
+/** Discrete note on a lead (list CRUD). Separate from CrmLead.notes free-text. */
+export type CrmLeadNote = {
+  id: string;
+  leadId: string;
+  body: string;
+  author: string;
+  /** ISO timestamp */
+  createdAt: string;
+  /** ISO timestamp */
+  updatedAt: string;
+};
+
 export type CrmDeal = {
   id: string;
   leadId: string;
@@ -272,6 +284,7 @@ export type CrmState = {
   samples: CrmSample[];
   quotations: CrmQuotation[];
   followUps: CrmFollowUp[];
+  leadNotes: CrmLeadNote[];
   emails: CrmEmail[];
   /** Persisted overlay for `emails` (which are re-fetched from Graph, not stored). */
   emailMeta: CrmEmailMeta[];

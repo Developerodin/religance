@@ -45,6 +45,7 @@ import type {
   CrmEmailMeta,
   CrmFollowUp,
   CrmLead,
+  CrmLeadNote,
   CrmQuotation,
   CrmSample,
   CrmState,
@@ -89,6 +90,7 @@ import { getBackendLeads, saveBackendLeads } from "./leads-api";
 import { getBackendSamples, saveBackendSamples } from "./samples-api";
 import { getBackendQuotations, saveBackendQuotations } from "./quotations-api";
 import { getBackendFollowUps, saveBackendFollowUps } from "./follow-ups-api";
+import { getBackendLeadNotes, saveBackendLeadNotes } from "./lead-notes-api";
 import {
   deleteNotificationByDedupeKey,
   postInboundEmailNotification,
@@ -103,6 +105,7 @@ import {
   saveBackendEmailTemplates,
 } from "./templates-api";
 import { nextQuoteNo } from "../quotations/quotation-form";
+import { normalizeNoteBody } from "../active-leads/lead-notes";
 import {
   INBOX_FOLDER_LABEL_IDS,
   type InboxFolderName,
@@ -237,6 +240,10 @@ type CrmContextValue = CrmState & {
   updateFollowUp: (id: string, patch: Partial<Omit<CrmFollowUp, "id">>) => void;
   deleteFollowUp: (id: string) => void;
   getLeadFollowUps: (leadId: string) => CrmFollowUp[];
+  addLeadNote: (leadId: string, body: string) => string | null;
+  updateLeadNote: (id: string, body: string) => boolean;
+  deleteLeadNote: (id: string) => void;
+  getLeadNotes: (leadId: string) => CrmLeadNote[];
   getLeadEmails: (leadId: string) => CrmEmail[];
   getLeadTimeline: (leadId: string) => CrmTimelineEvent[];
   findCompanyByDiscoveryId: (discoveryId: string) => CrmCompany | undefined;
@@ -699,6 +706,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       | "samples"
       | "quotations"
       | "followUps"
+      | "leadNotes"
       | "timeline"
       | "emailMeta",
       string[]
@@ -711,6 +719,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     samples: [],
     quotations: [],
     followUps: [],
+    leadNotes: [],
     timeline: [],
     emailMeta: [],
   });
@@ -791,6 +800,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         samples: [],
         quotations: [],
         followUps: [],
+        leadNotes: [],
         timeline: [],
         emailMeta: [],
       };
@@ -873,6 +883,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         samplesRes,
         quotationsRes,
         followUpsRes,
+        leadNotesRes,
         timelineRes,
         emailMetaRes,
       ] = await Promise.all([
@@ -883,6 +894,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         getBackendSamples(),
         getBackendQuotations(),
         getBackendFollowUps(),
+        getBackendLeadNotes(),
         getBackendTimeline(),
         getBackendEmailMeta(),
       ]);
@@ -900,6 +912,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         samplesRes.live &&
         quotationsRes.live &&
         followUpsRes.live &&
+        leadNotesRes.live &&
         timelineRes.live &&
         emailMetaRes.live;
       if (!allLive) return false;
@@ -911,6 +924,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       const samples = samplesRes.live ? samplesRes.data : [];
       const quotations = quotationsRes.live ? quotationsRes.data : [];
       const followUps = followUpsRes.live ? followUpsRes.data : [];
+      const leadNotes = leadNotesRes.live ? leadNotesRes.data : [];
       const timeline = timelineRes.live ? timelineRes.data : [];
       const emailMeta = emailMetaRes.live ? emailMetaRes.data : [];
 
@@ -931,6 +945,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         const mergedSamples = mergeById(samples, prev.samples);
         const mergedQuotations = mergeById(quotations, prev.quotations);
         const mergedFollowUps = mergeById(followUps, prev.followUps);
+        const mergedLeadNotes = mergeById(leadNotes, prev.leadNotes);
         const mergedTimeline = mergeById(timeline, prev.timeline);
 
         const reconciledMeta = reconcileEmailMetaAfterSync(
@@ -946,6 +961,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           samples: mergedSamples.map((s) => s.id),
           quotations: mergedQuotations.map((q) => q.id),
           followUps: mergedFollowUps.map((f) => f.id),
+          leadNotes: mergedLeadNotes.map((n) => n.id),
           timeline: mergedTimeline.map((t) => t.id),
           emailMeta: reconciledMeta.map((e) => e.id),
         };
@@ -958,6 +974,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           samples: mergedSamples,
           quotations: mergedQuotations,
           followUps: mergedFollowUps,
+          leadNotes: mergedLeadNotes,
           timeline: mergedTimeline,
           emailMeta: reconciledMeta,
           emails: applyEmailMeta(prev.emails, reconciledMeta),
@@ -1112,6 +1129,15 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     }, 800);
     return () => window.clearTimeout(t);
   }, [state.followUps]);
+
+  useEffect(() => {
+    if (!crmSyncedRef.current) return;
+    const t = window.setTimeout(
+      () => void persist("leadNotes", state.leadNotes, saveBackendLeadNotes),
+      800
+    );
+    return () => window.clearTimeout(t);
+  }, [state.leadNotes, persist]);
 
   useEffect(() => {
     if (!crmSyncedRef.current) return;
@@ -1310,6 +1336,65 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       }));
     },
     [patch]
+  );
+
+  const addLeadNote = useCallback(
+    (leadId: string, body: string): string | null => {
+      const normalized = normalizeNoteBody(body);
+      if (!normalized) return null;
+      const id = generateCrmId("note");
+      const now = new Date().toISOString();
+      patch((prev) => ({
+        ...prev,
+        leadNotes: [
+          {
+            id,
+            leadId,
+            body: normalized,
+            author: getUserDisplayName() || "—",
+            createdAt: now,
+            updatedAt: now,
+          },
+          ...prev.leadNotes,
+        ],
+      }));
+      return id;
+    },
+    [patch]
+  );
+
+  const updateLeadNote = useCallback(
+    (id: string, body: string): boolean => {
+      const normalized = normalizeNoteBody(body);
+      if (!normalized) return false;
+      const now = new Date().toISOString();
+      patch((prev) => ({
+        ...prev,
+        leadNotes: prev.leadNotes.map((n) =>
+          n.id === id ? { ...n, body: normalized, updatedAt: now } : n
+        ),
+      }));
+      return true;
+    },
+    [patch]
+  );
+
+  const deleteLeadNote = useCallback(
+    (id: string) => {
+      patch((prev) => ({
+        ...prev,
+        leadNotes: prev.leadNotes.filter((n) => n.id !== id),
+      }));
+    },
+    [patch]
+  );
+
+  const getLeadNotes = useCallback(
+    (leadId: string): CrmLeadNote[] =>
+      state.leadNotes
+        .filter((n) => n.leadId === leadId)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    [state.leadNotes]
   );
 
   const saveFromDiscovery = useCallback(
@@ -1850,6 +1935,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
             ? prev.quotations.filter((q) => q.leadId !== leadId)
             : prev.quotations,
           followUps: prev.followUps.filter((f) => f.leadId !== leadId),
+          leadNotes: prev.leadNotes.filter((n) => n.leadId !== leadId),
           contacts: contactId
             ? prev.contacts.filter((c) => c.id !== contactId)
             : prev.contacts,
@@ -3109,6 +3195,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         state.followUps
           .filter((f) => f.leadId === leadId)
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      addLeadNote,
+      updateLeadNote,
+      deleteLeadNote,
+      getLeadNotes,
       getLeadEmails: (leadId) =>
         state.emails.filter((e) => e.leadId === leadId),
       getLeadTimeline: (leadId) =>
@@ -3184,6 +3274,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       addFollowUp,
       updateFollowUp,
       deleteFollowUp,
+      addLeadNote,
+      updateLeadNote,
+      deleteLeadNote,
+      getLeadNotes,
       findCompanyByDiscoveryId,
       updateEmailTemplate,
       replaceEmailTemplates,

@@ -3,6 +3,7 @@
 import { companyInitials, leadEditHref } from "@/shared/crm/active-leads/active-leads-utils";
 import { FollowUpDateCell } from "@/shared/crm/active-leads/follow-up-date-cell";
 import { LeadDetailsDisplay } from "@/shared/crm/active-leads/lead-details-display";
+import { LeadNotesPanel } from "@/shared/crm/active-leads/lead-notes-panel";
 import { LeadStageProgress } from "@/shared/crm/active-leads/lead-stage-progress";
 import LeadStageBadge from "@/shared/crm/active-leads/lead-stage-badge";
 import { useCrm } from "@/shared/crm/store/crm-context";
@@ -90,6 +91,7 @@ export function ActiveLeadDetailDrawer({
   const {
     getLeadEmails,
     getLeadTimeline,
+    getLeadNotes,
     getCompany,
     getContact,
     medicines,
@@ -121,6 +123,7 @@ export function ActiveLeadDetailDrawer({
 
   const timeline = getLeadTimeline(lead.id);
   const emails = getLeadEmails(lead.id);
+  const leadNotes = getLeadNotes(lead.id);
   const leadDeals = deals.filter((d) => d.leadId === lead.id);
   const company = getCompany(lead.companyId);
   const contact = lead.contactId ? getContact(lead.contactId) : undefined;
@@ -233,6 +236,11 @@ export function ActiveLeadDetailDrawer({
                 {tab.id === "emails" && emails.length > 0 && (
                   <span className="ms-1 badge bg-primary/15 text-primary text-[0.6rem]">
                     {emails.length}
+                  </span>
+                )}
+                {tab.id === "notes" && leadNotes.length > 0 && (
+                  <span className="ms-1 badge bg-primary/15 text-primary text-[0.6rem]">
+                    {leadNotes.length}
                   </span>
                 )}
               </button>
@@ -380,19 +388,7 @@ export function ActiveLeadDetailDrawer({
             </div>
           )}
 
-          {activeTab === "notes" && (
-            <div className="py-4" role="tabpanel">
-              <p className="text-[0.875rem] text-textmuted whitespace-pre-wrap mb-3">
-                {lead.notes || "No notes yet."}
-              </p>
-              <Link
-                href={leadEditHref(lead.id, { from: "active-leads" })}
-                className="ti-btn ti-btn-light active-leads-drawer-btn"
-              >
-                Edit on full page
-              </Link>
-            </div>
-          )}
+          {activeTab === "notes" && <LeadNotesPanel lead={lead} />}
           </div>
         </SimpleBar>
 
