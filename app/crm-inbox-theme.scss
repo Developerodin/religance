@@ -925,6 +925,37 @@
     flex-wrap: nowrap;
   }
 
+  .crm-inbox-lead-context-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 0.375rem;
+    color: var(--inbox-muted);
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 0.15s ease, background 0.15s ease;
+
+    i {
+      font-size: 1.125rem;
+      line-height: 1;
+    }
+
+    &:hover {
+      color: var(--inbox-text);
+      background: rgba(139, 92, 246, 0.12);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--inbox-purple);
+      outline-offset: 2px;
+    }
+  }
+
   .crm-inbox-open-lead-btn {
     display: inline-flex;
     align-items: center;

@@ -185,6 +185,7 @@ type CrmContextValue = CrmState & {
   /** Resolves to null on success, or an error message if the send failed. */
   sendCrmEmail: (input: SendCrmEmailInput) => Promise<string | null>;
   linkEmailToLead: (emailId: string, leadId: string) => void;
+  unlinkEmailFromLead: (emailId: string) => void;
   /** Star / read / archive / trash. Persisted, so it survives a reload. */
   setEmailFlag: (emailId: string, flag: EmailFlag, on: boolean) => void;
   emailIdsWithFlag: (flag: EmailFlag) => string[];
@@ -2070,6 +2071,23 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     [patch]
   );
 
+  const unlinkEmailFromLead = useCallback(
+    (emailId: string) => {
+      patch((prev) => {
+        const email = prev.emails.find((e) => e.id === emailId);
+        if (!email?.leadId) return prev;
+        return {
+          ...prev,
+          emails: prev.emails.map((e) =>
+            e.id === emailId ? { ...e, leadId: null } : e
+          ),
+          emailMeta: upsertEmailMeta(prev.emailMeta, emailId, { leadId: null }),
+        };
+      });
+    },
+    [patch]
+  );
+
   const setEmailFlag = useCallback(
     (emailId: string, flag: EmailFlag, on: boolean) => {
       // Mirror the change into Outlook, best effort: Outlook is the source of
@@ -3021,6 +3039,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       createDealFromLead,
       sendCrmEmail,
       linkEmailToLead,
+      unlinkEmailFromLead,
       setEmailFlag,
       emailIdsWithFlag,
       connectOutlook,
@@ -3102,6 +3121,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       createDealFromLead,
       sendCrmEmail,
       linkEmailToLead,
+      unlinkEmailFromLead,
       setEmailFlag,
       emailIdsWithFlag,
       connectOutlook,

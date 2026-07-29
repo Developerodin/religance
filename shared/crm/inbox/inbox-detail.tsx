@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { companyInitials } from "@/shared/crm/active-leads/active-leads-utils";
 import LeadStageBadge from "@/shared/crm/active-leads/lead-stage-badge";
 import type {
@@ -8,7 +9,9 @@ import type {
   CrmEmailAttachment,
   CrmLead,
 } from "@/shared/crm/store/types";
+import { ConfirmDeleteOverlay } from "@/shared/crm/ui/confirm-delete-overlay";
 import Link from "next/link";
+import { Button } from "@/shared/ui/button";
 import { InboxAvatar } from "./inbox-avatar";
 import { REPLY_TOOLBAR_GROUPS } from "./inbox-constants";
 import { InboxOverflowMenu } from "./inbox-overflow-menu";
@@ -47,7 +50,7 @@ export function InboxDetailPanel({
   active,
   meta,
   mailboxDisplayName: _mailboxDisplayName,
-  gmailConnected,
+  outlookConnected,
   starred,
   onToggleStar,
   onMarkUnread,
@@ -72,11 +75,12 @@ export function InboxDetailPanel({
   suggested,
   suggestedCompany,
   onLinkLead,
+  onUnlinkLead,
 }: {
   active: CrmEmail;
   meta: InboxRowMeta & { lead?: CrmLead };
   mailboxDisplayName?: string | null;
-  gmailConnected: boolean;
+  outlookConnected: boolean;
   starred: boolean;
   onToggleStar: () => void;
   onMarkUnread: () => void;
@@ -101,9 +105,31 @@ export function InboxDetailPanel({
   suggested: CrmLead | null;
   suggestedCompany: CrmCompany | null | undefined;
   onLinkLead: (leadId: string) => void;
+  onUnlinkLead: () => void;
 }) {
+  const [pendingLinkLeadId, setPendingLinkLeadId] = useState<string | null>(
+    null
+  );
+  const [pendingUnlink, setPendingUnlink] = useState(false);
+
+  const pendingLinkLead = pendingLinkLeadId
+    ? leads.find((l) => l.id === pendingLinkLeadId) ?? null
+    : null;
+  const pendingLinkCompany = pendingLinkLead
+    ? companies.find((c) => c.id === pendingLinkLead.companyId)
+    : null;
+  const pendingLinkLabel = pendingLinkLead
+    ? pendingLinkCompany
+      ? `${pendingLinkCompany.name} — ${pendingLinkLead.title}`
+      : pendingLinkLead.title
+    : "";
   const company =
     meta.lead && companies.find((c) => c.id === meta.lead!.companyId);
+  const linkedLeadLabel =
+    meta.lead && company
+      ? `${company.name} — ${meta.lead.title}`
+      : meta.lead?.title ?? "";
+
   const bodyParts = parseEmailBody(active.body);
   const attachments = active.attachments ?? [];
   const attachmentsTotal = attachments.reduce((sum, a) => sum + (a.size || 0), 0);
@@ -243,6 +269,14 @@ export function InboxDetailPanel({
               </div>
             </div>
             <div className="crm-inbox-lead-context-actions">
+              <button
+                type="button"
+                className="crm-inbox-lead-context-remove"
+                aria-label="Remove linked lead"
+                onClick={() => setPendingUnlink(true)}
+              >
+                <i className="ri-close-line" aria-hidden />
+              </button>
               <LeadStageBadge stage={meta.lead.stage} compact />
               <Link
                 href={`/active-leads?lead=${meta.lead.id}`}
@@ -256,7 +290,7 @@ export function InboxDetailPanel({
           </div>
         )}
 
-        {!active.leadId && gmailConnected && (
+        {!active.leadId && outlookConnected && (
           <div className="crm-inbox-link-banner">
             <i className="ri-link-unlink-m"></i>
             <div>
@@ -274,7 +308,7 @@ export function InboxDetailPanel({
                   defaultValue=""
                   onChange={(e) => {
                     const id = e.target.value;
-                    if (id) onLinkLead(id);
+                    if (id) setPendingLinkLeadId(id);
                     e.target.value = "";
                   }}
                 >
@@ -286,13 +320,13 @@ export function InboxDetailPanel({
                   ))}
                 </select>
                 {suggested && (
-                  <button
-                    type="button"
-                    className="ti-btn ti-btn-sm ti-btn-primary"
-                    onClick={() => onLinkLead(suggested.id)}
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setPendingLinkLeadId(suggested.id)}
                   >
                     Use suggestion
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -412,7 +446,7 @@ export function InboxDetailPanel({
               type="email"
               value={forwardTo}
               onChange={(e) => onForwardToChange(e.target.value)}
-              disabled={!gmailConnected}
+              disabled={!outlookConnected}
               placeholder="Forward to (email address)"
               className="crm-inbox-reply-input"
               aria-label="Forward to"
@@ -421,7 +455,7 @@ export function InboxDetailPanel({
           <textarea
             value={replyText}
             onChange={(e) => onReplyChange(e.target.value)}
-            disabled={!gmailConnected}
+            disabled={!outlookConnected}
             placeholder={
               replyMode === "forward"
                 ? "Add a note (optional)…"
@@ -458,7 +492,7 @@ export function InboxDetailPanel({
                 type="button"
                 className="crm-inbox-btn-reply"
                 disabled={
-                  !gmailConnected ||
+                  !outlookConnected ||
                   sending ||
                   (replyMode === "forward"
                     ? !forwardTo.trim()
@@ -479,6 +513,35 @@ export function InboxDetailPanel({
         </div>
       </footer>
       </div>
+
+      <ConfirmDeleteOverlay
+        open={pendingLinkLeadId !== null}
+        title="Link email to lead?"
+        entityName={pendingLinkLabel}
+        description="This thread will be associated with"
+        entitySuffix="for pipeline tracking and follow-ups."
+        confirmLabel="Link lead"
+        tone="primary"
+        onConfirm={() => {
+          if (pendingLinkLeadId) onLinkLead(pendingLinkLeadId);
+          setPendingLinkLeadId(null);
+        }}
+        onCancel={() => setPendingLinkLeadId(null)}
+      />
+
+      <ConfirmDeleteOverlay
+        open={pendingUnlink}
+        title="Remove linked lead?"
+        entityName={linkedLeadLabel}
+        description="This email will no longer be associated with"
+        entitySuffix="The lead and email are not deleted."
+        confirmLabel="Remove link"
+        onConfirm={() => {
+          onUnlinkLead();
+          setPendingUnlink(false);
+        }}
+        onCancel={() => setPendingUnlink(false)}
+      />
     </section>
   );
 }

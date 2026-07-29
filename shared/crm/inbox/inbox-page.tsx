@@ -1,6 +1,6 @@
 "use client";
 
-import { applyTemplate, useCrm } from "@/shared/crm/store/crm-context";
+import { applyTemplate, dedupeEmailsByThread, useCrm } from "@/shared/crm/store/crm-context";
 import { getUserDisplayName } from "@/shared/auth/auth-client";
 import type { CrmEmail, CrmEmailAttachment } from "@/shared/crm/store/types";
 import { downloadOutlookAttachment } from "@/shared/crm/store/outlook-api";
@@ -63,15 +63,16 @@ export default function InboxPage() {
     leads,
     companies,
     contacts,
-    gmailConnected,
+    outlookConnected,
     outlookAccountId,
     outlookAccounts,
     outlookEmail,
-    connectGmail,
+    connectOutlook,
     disconnectOutlook,
     syncOutlookInbox,
     switchOutlookAccount,
     linkEmailToLead,
+    unlinkEmailFromLead,
     setEmailFlag,
     emailIdsWithFlag,
     sendCrmEmail,
@@ -87,14 +88,7 @@ export default function InboxPage() {
   const searchParams = useSearchParams();
 
   const sortedEmails = useMemo(() => {
-    const byThread = new Map<string, CrmEmail>();
-    for (const email of emails) {
-      const existing = byThread.get(email.threadId);
-      if (!existing || email.sentAt.localeCompare(existing.sentAt) > 0) {
-        byThread.set(email.threadId, email);
-      }
-    }
-    return [...byThread.values()].sort((a, b) =>
+    return dedupeEmailsByThread(emails).sort((a, b) =>
       b.sentAt.localeCompare(a.sentAt)
     );
   }, [emails]);
@@ -287,7 +281,7 @@ export default function InboxPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (!pendingEmailId || !gmailConnected) return;
+    if (!pendingEmailId || !outlookConnected) return;
     const match =
       sortedEmails.find((e) => e.id === pendingEmailId) ??
       sortedEmails.find((e) => e.messageId === pendingEmailId);
@@ -308,7 +302,7 @@ export default function InboxPage() {
     setActiveFolder(folderForEmail(match, trashedIds, archivedIds));
   }, [
     pendingEmailId,
-    gmailConnected,
+    outlookConnected,
     sortedEmails,
     trashedIds,
     archivedIds,
@@ -710,8 +704,8 @@ export default function InboxPage() {
   const handleConnectOutlook = useCallback(() => {
     setConnectingOutlook(true);
     setAuthError(null);
-    connectGmail();
-  }, [connectGmail]);
+    connectOutlook();
+  }, [connectOutlook]);
 
   const handleDisconnectOutlook = useCallback(async () => {
     setSelectedId(null);
@@ -736,7 +730,7 @@ export default function InboxPage() {
   );
 
   const showLoadMore =
-    gmailConnected &&
+    outlookConnected &&
     !searchQuery.trim() &&
     !activeTag &&
     inboxFolderHasMore(activeFolder);
@@ -775,7 +769,7 @@ export default function InboxPage() {
     );
   }
 
-  if (!gmailConnected) {
+  if (!outlookConnected) {
     return (
       <Fragment>
         <Seo title="Inbox" />
@@ -883,7 +877,7 @@ export default function InboxPage() {
           <div className="box-body !p-0">
             <div className="crm-inbox-layout">
               <InboxSidebar
-                gmailConnected={gmailConnected}
+                outlookConnected={outlookConnected}
                 accountEmail={outlookEmail ?? null}
                 accountDisplayName={activeOutlookAccount?.displayName ?? null}
                 onDisconnectOutlook={handleDisconnectOutlook}
@@ -897,7 +891,7 @@ export default function InboxPage() {
               />
 
               <InboxListPanel
-                gmailConnected={gmailConnected}
+                outlookConnected={outlookConnected}
                 onConnect={handleConnectOutlook}
                 activeFolder={activeFolder}
                 searchQuery={searchQuery}
@@ -942,7 +936,7 @@ export default function InboxPage() {
                   active={active}
                   meta={activeMeta}
                   mailboxDisplayName={activeMailbox?.name ?? null}
-                  gmailConnected={gmailConnected}
+                  outlookConnected={outlookConnected}
                   starred={starredIds.includes(active.id)}
                   onToggleStar={() =>
                     setEmailFlag(
@@ -983,6 +977,7 @@ export default function InboxPage() {
                   suggested={suggested}
                   suggestedCompany={suggestedCompany}
                   onLinkLead={(leadId) => linkEmailToLead(active.id, leadId)}
+                  onUnlinkLead={() => unlinkEmailFromLead(active.id)}
                 />
               ) : (
                 <InboxDetailEmpty />
