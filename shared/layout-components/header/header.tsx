@@ -6,6 +6,7 @@ import { CRM_HOME_PATH } from '@/shared/layout-components/sidebar/nav';
 import { getUser, logout } from '@/shared/auth/auth-client';
 import { useRouter } from 'next/navigation';
 import { useNotifications } from "@/shared/crm/notifications/notification-context";
+import { formatNotificationTime } from "@/shared/crm/notifications/notification-time";
 import { useTheme } from "@/shared/theme/theme-provider";
 
 const Header = () => {
@@ -43,15 +44,6 @@ const Header = () => {
     category === "action"
       ? { bg: "!bg-primary/10", text: "primary" }
       : { bg: "!bg-secondary/10", text: "secondary" };
-
-  const handleNotificationClose = (
-    id: string,
-    event: React.MouseEvent<HTMLAnchorElement, MouseEvent>
-  ) => {
-    event.stopPropagation();
-    event.preventDefault();
-    void removeNotification(id);
-  };
 
   const handleNotificationClick = (
     id: string,
@@ -314,89 +306,97 @@ const Header = () => {
                       id="notification-icon-badge">{total}</span>
                   </span>
                 </button>
-                <div className="main-header-dropdown !-mt-3 !p-0 hs-dropdown-menu ti-dropdown-menu bg-white !w-[22rem] border-0 border-defaultborder hidden !m-0"
+                <div className="main-header-dropdown notification-dropdown !-mt-3 !p-0 hs-dropdown-menu ti-dropdown-menu bg-white dark:bg-bodybg !w-[22rem] border border-defaultborder dark:border-white/10 hidden !m-0"
                   aria-labelledby="dropdown-notification">
 
-                  <div className="ti-dropdown-header !m-0 !p-4 !bg-transparent flex justify-between items-center gap-2">
-                    <p className="mb-0 text-[1.0625rem] text-defaulttextcolor font-semibold shrink-0">Notifications</p>
-                    <button
-                      type="button"
-                      aria-label="Mark all notifications as read"
-                      disabled={total === 0 || loading || markingAllAsRead}
-                      onClick={() => void markAllAsRead()}
-                      className="text-[0.75rem] font-medium text-[#536485] hover:text-primary disabled:opacity-50 disabled:pointer-events-none py-2 px-2 min-h-[2.75rem] whitespace-nowrap transition-colors"
-                    >
-                      {markingAllAsRead ? "Clearing…" : "Mark all as read"}
-                    </button>
-                    <span className="text-[0.75em] py-[0.25rem/2] px-[0.45rem] font-[600] rounded-sm bg-secondary/10 text-secondary shrink-0"
-                      id="notifiation-data">{`${total} Unread`}</span>
+                  <div className="notification-dropdown-header">
+                    <div className="notification-dropdown-header-main">
+                      <p className="notification-dropdown-title">Notifications</p>
+                      {showBadge ? (
+                        <span className="notification-dropdown-count" id="notifiation-data">
+                          {total} unread
+                        </span>
+                      ) : null}
+                    </div>
+                    {total > 0 ? (
+                      <button
+                        type="button"
+                        aria-label="Mark all notifications as read"
+                        disabled={loading || markingAllAsRead}
+                        onClick={() => void markAllAsRead()}
+                        className="notification-dropdown-mark-all"
+                      >
+                        {markingAllAsRead ? "Clearing…" : "Mark all as read"}
+                      </button>
+                    ) : null}
                   </div>
                   <div className="dropdown-divider"></div>
                   <ul className="list-none !m-0 !p-0 end-0" id="header-notification-scroll">
                   {notifications.map((item) => {
                     const colors = iconColorForCategory(item.category);
+                    const received = formatNotificationTime(item.createdAt);
                     return (
-                      <li className="ti-dropdown-item dropdown-item" key={item.id}>
-                        <div className="flex items-start">
-                          <div className="pe-2">
-                            <span
-                              className={`inline-flex text-${colors.text} justify-center items-center !w-[2.5rem] !h-[2.5rem] !leading-[2.5rem] !text-[0.8rem] ${colors.bg} !rounded-[50%]`}>
-                              <i className={`ti ti-${item.icon} text-[1.125rem]`}></i>
-                            </span>
-                          </div>
-                          <div className="grow flex items-center justify-between">
-                            <div>
-                              <p className="mb-0 text-defaulttextcolor dark:text-white text-[0.8125rem] font-semibold">
-                                <Link
-                                  href={item.href}
-                                  scroll={false}
-                                  onClick={(event) =>
-                                    handleNotificationClick(item.id, item.href, event)
-                                  }>
-                                  {item.title}
-                                </Link>
-                              </p>
-                              <span className="text-[#8c9097] dark:text-white/50 font-normal text-[0.75rem] header-notification-text">
-                                {item.body}
-                              </span>
-                            </div>
-                            <div>
+                      <li className="notification-dropdown-item" key={item.id}>
+                        <div className="notification-dropdown-item-inner">
+                          <span
+                            className={`notification-dropdown-icon text-${colors.text} ${colors.bg}`}
+                            aria-hidden="true">
+                            <i className={`ti ti-${item.icon}`}></i>
+                          </span>
+                          <div className="notification-dropdown-content">
+                            <p className="notification-dropdown-item-title">
                               <Link
-                                aria-label="Dismiss notification"
-                                href="#!"
+                                href={item.href}
                                 scroll={false}
-                                className="min-w-fit text-[#8c9097] dark:text-white/50 me-1 dropdown-item-close1"
-                                onClick={(event) => handleNotificationClose(item.id, event)}>
-                                <i className="ti ti-x text-[1rem]"></i>
+                                onClick={(event) =>
+                                  handleNotificationClick(item.id, item.href, event)
+                                }>
+                                {item.title}
                               </Link>
-                            </div>
+                            </p>
+                            <p className="notification-dropdown-item-body header-notification-text">
+                              {item.body}
+                            </p>
+                            <time
+                              className="notification-dropdown-item-time"
+                              dateTime={received.iso}
+                              title={received.title}>
+                              {received.label}
+                            </time>
                           </div>
+                          <button
+                            type="button"
+                            aria-label="Dismiss notification"
+                            className="notification-dropdown-dismiss"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void removeNotification(item.id);
+                            }}>
+                            <i className="ti ti-x" aria-hidden="true"></i>
+                          </button>
                         </div>
                       </li>
                     );
                   })}
                   </ul>
 
-                  <div className={`p-4 empty-header-item1 border-t mt-2 ${notifications.length === 0 ? "hidden" : "block"}`}>
+                  <div className={`notification-dropdown-footer empty-header-item1 ${notifications.length === 0 ? "hidden" : "block"}`}>
                     {activityTotal > 0 ? (
-                      <div className="grid">
-                        <Link href="/notifications" className="ti-btn ti-btn-primary-full !m-0 w-full p-2">
-                          View All
-                        </Link>
-                      </div>
+                      <Link href="/notifications" className="ti-btn ti-btn-primary-full !m-0 w-full p-2">
+                        View all
+                      </Link>
                     ) : total > 0 ? (
-                      <p className="mb-0 text-center text-[0.75rem] text-[#8c9097] dark:text-white/50">
+                      <p className="notification-dropdown-footer-note">
                         Action items above
                       </p>
                     ) : null}
                   </div>
-                  <div className={`p-[3rem] empty-item1 ${total === 0 ? "block" : "hidden"}`}>
-                    <div className="text-center">
-                      <span className="!h-[4rem]  !w-[4rem] avatar !leading-[4rem] !rounded-full !bg-secondary/10 !text-secondary">
-                        <i className="ri-notification-off-line text-[2rem]  "></i>
-                      </span>
-                      <h6 className="font-semibold mt-3 text-defaulttextcolor dark:text-[#8c9097] dark:text-white/50 text-[1rem]">No New Notifications</h6>
-                    </div>
+                  <div className={`notification-dropdown-empty empty-item1 ${total === 0 ? "block" : "hidden"}`}>
+                    <span className="notification-dropdown-empty-icon" aria-hidden="true">
+                      <i className="ti ti-bell-off"></i>
+                    </span>
+                    <p className="notification-dropdown-empty-title">No notifications</p>
+                    <p className="notification-dropdown-empty-body">You&apos;re all caught up.</p>
                   </div>
                 </div>
               </div>

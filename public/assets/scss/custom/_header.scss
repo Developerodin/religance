@@ -397,7 +397,91 @@
   @apply max-w-[14.5rem];
 }
 
-/* Start::header notification dropdown */
+.notification-dropdown-header {
+  @apply flex items-center justify-between gap-3 px-4 py-3;
+}
+
+.notification-dropdown-header-main {
+  @apply flex min-w-0 items-center gap-2;
+}
+
+.notification-dropdown-title {
+  @apply mb-0 text-[1rem] font-semibold text-defaulttextcolor dark:text-white;
+}
+
+.notification-dropdown-count {
+  @apply shrink-0 rounded-sm bg-secondary/10 px-2 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-secondary;
+}
+
+.notification-dropdown-mark-all {
+  @apply shrink-0 rounded-md px-2 py-2 text-[0.75rem] font-medium text-textmuted transition-colors hover:text-primary disabled:pointer-events-none disabled:opacity-50 dark:text-white/60 dark:hover:text-white;
+  min-height: 2.75rem;
+}
+
+.notification-dropdown-item {
+  @apply border-b border-defaultborder dark:border-white/10 last:border-b-0;
+}
+
+.notification-dropdown-item-inner {
+  @apply flex items-start gap-3 px-4 py-3;
+}
+
+.notification-dropdown-icon {
+  @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[1.125rem];
+}
+
+.notification-dropdown-content {
+  @apply min-w-0 flex-1;
+}
+
+.notification-dropdown-item-title {
+  @apply mb-0 text-[0.8125rem] font-semibold leading-snug text-defaulttextcolor dark:text-white;
+
+  a {
+    @apply text-inherit no-underline hover:text-primary;
+  }
+}
+
+.notification-dropdown-item-body {
+  @apply mb-0 mt-0.5 text-[0.75rem] font-normal leading-snug text-textmuted dark:text-white/50;
+}
+
+.notification-dropdown-item-time {
+  @apply mt-1 block text-[0.6875rem] font-normal text-textmuted/80 dark:text-white/40;
+}
+
+.notification-dropdown-dismiss {
+  @apply -me-1 inline-flex shrink-0 items-center justify-center rounded-md text-textmuted transition-colors hover:bg-black/5 hover:text-defaulttextcolor dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}
+
+.notification-dropdown-footer {
+  @apply border-t border-defaultborder p-4 dark:border-white/10;
+}
+
+.notification-dropdown-footer-note {
+  @apply mb-0 text-center text-[0.75rem] text-textmuted dark:text-white/50;
+}
+
+.notification-dropdown-empty {
+  @apply px-6 py-10 text-center;
+}
+
+.notification-dropdown-empty-icon {
+  @apply mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-secondary/10 text-[1.5rem] text-secondary;
+}
+
+.notification-dropdown-empty-title {
+  @apply mb-1 mt-3 text-[0.9375rem] font-semibold text-defaulttextcolor dark:text-white;
+}
+
+.notification-dropdown-empty-body {
+  @apply mb-0 text-[0.8125rem] text-textmuted dark:text-white/50;
+}
+
+/* End::header notification dropdown */
+
 .header-icon {
   @apply text-[1.125rem] leading-[1.75rem] text-headerprimecolor;
 }
