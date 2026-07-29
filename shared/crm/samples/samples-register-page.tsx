@@ -13,7 +13,9 @@ import { SAMPLE_STATUSES } from "@/shared/crm/store/types";
 import { LeadFormRowActions } from "@/shared/crm/active-leads/lead-form-sections/lead-form-section-shell";
 import { ConfirmDeleteOverlay } from "@/shared/crm/ui/confirm-delete-overlay";
 import Seo from "@/shared/layout-components/seo/seo";
-import { Fragment, useMemo, useState } from "react";
+import { Button } from "@/shared/ui/button";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 // Samples still "in the field" — dispatched but not yet closed out.
 const IN_FIELD = new Set(["Dispatched", "In transit", "Delivered", "Feedback received"]);
@@ -283,6 +285,11 @@ function SampleEditorModal({
   const [form, setForm] = useState<SampleFormModel>(
     sample ? sampleToForm(sample) : emptySampleForm()
   );
+  const [saving, setSaving] = useState(false);
+  const titleId = useId();
+  const leadSelectRef = useRef<HTMLSelectElement>(null);
+  const isEdit = Boolean(sample);
+  const canSave = Boolean(leadId && form.productId) && !saving;
 
   const leadOptions = useMemo(
     () =>
@@ -292,39 +299,88 @@ function SampleEditorModal({
     [leads]
   );
   const selectedLead = leads.find((l) => l.id === leadId);
-  const canSave = Boolean(leadId && form.productId);
 
-  return (
-    <div
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
-    >
+  useEffect(() => {
+    const t = window.setTimeout(() => leadSelectRef.current?.focus(), 0);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || saving) return;
+      e.stopImmediatePropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey, true);
+    };
+  }, [onClose, saving]);
+
+  const closeOverlay = () => {
+    if (saving) return;
+    onClose();
+  };
+
+  const saveOverlay = () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      onSave(leadId, form);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="sample-editor-overlay" role="presentation">
+      <button
+        type="button"
+        className="sample-editor-overlay__scrim"
+        aria-label="Close dialog"
+        onClick={closeOverlay}
+        tabIndex={-1}
+      />
       <div
-        className="box custom-box w-full max-w-2xl max-h-[90vh] overflow-y-auto mb-0"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="sample-editor-overlay__dialog"
       >
-        <div className="box-header flex items-center justify-between">
-          <h6 className="box-title mb-0">
-            {sample ? "Edit sample" : "Add sample"}
-          </h6>
+        <div className="sample-editor-overlay__header">
+          <h2 id={titleId} className="sample-editor-overlay__title">
+            {isEdit ? "Edit sample" : "Add sample"}
+          </h2>
           <button
             type="button"
-            className="ti-btn ti-btn-sm ti-btn-light"
-            onClick={onClose}
+            className="sample-editor-overlay__close"
             aria-label="Close"
+            onClick={closeOverlay}
+            disabled={saving}
           >
-            <i className="ri-close-line"></i>
+            <i className="ri-close-line" aria-hidden />
           </button>
         </div>
-        <div className="box-body">
-          <div className="mb-3">
-            <label className="form-label text-[0.75rem]" htmlFor="sm-lead">
+
+        <div className="sample-editor-overlay__body">
+          <div className="sample-editor-overlay__field">
+            <label
+              className="sample-editor-overlay__label"
+              htmlFor="sm-lead"
+            >
               Lead
             </label>
             <select
+              ref={leadSelectRef}
               id="sm-lead"
-              className="form-select"
+              className="form-select sample-editor-overlay__control"
               value={leadId}
+              disabled={saving}
               onChange={(e) => setLeadId(e.target.value)}
             >
               <option value="">Select a lead…</option>
@@ -335,33 +391,47 @@ function SampleEditorModal({
                 </option>
               ))}
             </select>
-            {selectedLead && (
-              <p className="text-[0.75rem] text-textmuted mb-0 mt-1">
+            {selectedLead ? (
+              <p className="sample-editor-overlay__hint">
                 Owner: {selectedLead.assignedTo || "—"}
               </p>
-            )}
+            ) : null}
           </div>
           <SampleFormFields
             form={form}
             onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
             medicines={medicines}
             idPrefix="sm-modal"
+            disabled={saving}
           />
         </div>
-        <div className="box-footer flex justify-end gap-2">
-          <button type="button" className="ti-btn ti-btn-light" onClick={onClose}>
+
+        <div className="sample-editor-overlay__footer">
+          <Button
+            variant="light"
+            size="md"
+            className="sample-editor-overlay__btn"
+            onClick={closeOverlay}
+            disabled={saving}
+          >
             Cancel
-          </button>
+          </Button>
+          {/* ponytail: raw primary-full — Button variant=primary is soft (bg/10) and beats primary-full in CSS order */}
           <button
             type="button"
-            className="ti-btn ti-btn-primary"
+            className="ti-btn ti-btn-primary-full crm-btn crm-btn--md sample-editor-overlay__btn sample-editor-overlay__save"
+            onClick={saveOverlay}
             disabled={!canSave}
-            onClick={() => onSave(leadId, form)}
           >
-            {sample ? "Save changes" : "Add sample"}
+            {saving
+              ? "Saving…"
+              : isEdit
+                ? "Save changes"
+                : "Add sample"}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
