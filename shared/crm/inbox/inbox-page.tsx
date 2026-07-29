@@ -14,7 +14,7 @@ import {
   InboxDetailLoading,
   InboxDetailPanel,
 } from "./inbox-detail";
-import { type InboxFolderName } from "./inbox-constants";
+import { INBOX_FOLDERS, INBOX_FOLDER_LABEL_IDS, type InboxFolderName } from "./inbox-constants";
 import { InboxListPanel } from "./inbox-list";
 import { InboxSidebar } from "./inbox-sidebar";
 import {
@@ -70,6 +70,9 @@ export default function InboxPage() {
     connectOutlook,
     disconnectOutlook,
     syncOutlookInbox,
+    syncOutlookFolder,
+    trackOutlookSelectedThread,
+    hydrateOutlookThread,
     switchOutlookAccount,
     linkEmailToLead,
     unlinkEmailFromLead,
@@ -82,8 +85,10 @@ export default function InboxPage() {
     loadingMoreInboxFolder,
     loadMoreInboxEmails,
     outlookInboxSyncing,
+    outlookInboxBootstrapping,
     outlookInboxLastSyncedAt,
     outlookSyncError,
+    outlookFolderStats,
   } = useCrm();
   const searchParams = useSearchParams();
 
@@ -408,38 +413,34 @@ export default function InboxPage() {
   const active = filtered.find((e) => e.id === selectedId) ?? null;
   const activeMeta = active ? rowMeta(active) : null;
 
+  useEffect(() => {
+    trackOutlookSelectedThread(active?.threadId ?? null);
+  }, [active?.threadId, trackOutlookSelectedThread]);
+
+  useEffect(() => {
+    if (!active?.threadId || active.bodyLoaded) return;
+    void hydrateOutlookThread(active.threadId);
+  }, [active?.threadId, active?.bodyLoaded, hydrateOutlookThread]);
+
+  useEffect(() => {
+    if (!outlookConnected) return;
+    void syncOutlookFolder(activeFolder);
+  }, [activeFolder, outlookConnected, syncOutlookFolder]);
+
   const folderCounts = useMemo(() => {
-    const activePool = sortedEmails.filter(
-      (e) => !isArchivedMail(e) && !isTrashedMail(e) && !isDraftMail(e)
-    );
-    const inboxUnread = activePool.filter((e) => {
-      const { read } = rowMeta(e);
-      return !read && isInboxMail(e);
-    }).length;
-    return {
-      Inbox: inboxUnread,
-      "Sent Items": activePool.filter((e) => isSentMail(e)).length,
-      Drafts: sortedEmails.filter((e) => isDraftMail(e)).length,
-      "Junk Email": activePool.filter(
-        (e) => isSpamMail(e) || rowMeta(e).tag === "finance"
-      ).length,
-      Archive: sortedEmails.filter((e) => isArchivedMail(e)).length,
-      "Deleted Items": sortedEmails.filter((e) => isTrashedMail(e)).length,
-      "Conversation History": sortedEmails.filter((e) =>
-        isConversationHistoryMail(e)
-      ).length,
-    } satisfies Partial<Record<InboxFolderName, number>>;
-  }, [
-    isArchivedMail,
-    isConversationHistoryMail,
-    isDraftMail,
-    isInboxMail,
-    isSentMail,
-    isSpamMail,
-    isTrashedMail,
-    rowMeta,
-    sortedEmails,
-  ]);
+    const counts: Partial<Record<InboxFolderName, number | null>> = {};
+    for (const folder of INBOX_FOLDERS) {
+      const labelId = INBOX_FOLDER_LABEL_IDS[folder.name];
+      const stat = outlookFolderStats[labelId];
+      if (stat?.loaded) {
+        counts[folder.name] =
+          folder.name === "Inbox" ? stat.unreadItemCount : stat.totalItemCount;
+      } else {
+        counts[folder.name] = null;
+      }
+    }
+    return counts;
+  }, [outlookFolderStats]);
 
   const buildComposeTemplateVars = useCallback(() => {
     const toEmail = composeDraft.to.trim().toLowerCase();
@@ -908,7 +909,7 @@ export default function InboxPage() {
                 allChecked={allChecked}
                 loading={
                   Boolean(switchingAccountId) ||
-                  (outlookInboxSyncing && basePool.length === 0)
+                  (outlookInboxBootstrapping && basePool.length === 0)
                 }
                 hasMore={showLoadMore}
                 loadingMore={loadingMoreInboxFolder === activeFolder}
@@ -972,6 +973,7 @@ export default function InboxPage() {
                   sending={sending}
                   sentFlash={sentFlash}
                   sendError={sendError}
+                  hydratingBody={active.bodyLoaded === false}
                   leads={leads}
                   companies={companies}
                   suggested={suggested}

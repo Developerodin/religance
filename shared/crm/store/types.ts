@@ -238,6 +238,8 @@ export type CrmEmail = {
   toEmail: string;
   sentAt: string;
   attachments?: CrmEmailAttachment[];
+  /** False until GET thread hydrates body/attachments. */
+  bodyLoaded?: boolean;
 };
 
 /**

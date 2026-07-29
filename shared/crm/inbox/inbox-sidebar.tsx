@@ -47,7 +47,7 @@ export function InboxSidebar({
   onCompose: () => void;
   activeFolder: InboxFolderName;
   onFolderChange: (folder: InboxFolderName) => void;
-  folderCounts: Partial<Record<InboxFolderName, number>>;
+  folderCounts: Partial<Record<InboxFolderName, number | null>>;
   activeTag: InboxTag | null;
   onTagChange: (tag: InboxTag | null) => void;
 }) {
@@ -127,7 +127,7 @@ export function InboxSidebar({
           aria-label="Mail folders"
         >
           {INBOX_FOLDERS.map((f) => {
-            const count = folderCounts[f.name] ?? 0;
+            const count = folderCounts[f.name];
             const isActive = activeFolder === f.name;
             return (
               <button
@@ -148,7 +148,11 @@ export function InboxSidebar({
                   <i className={`${f.icon} text-base opacity-85`} aria-hidden />
                   <span className="truncate">{f.name}</span>
                 </span>
-                {count > 0 ? (
+                {count === null || count === undefined ? (
+                  <span className="shrink-0 px-1 text-[0.62rem] font-medium tabular-nums text-textmuted">
+                    —
+                  </span>
+                ) : count > 0 ? (
                   <span
                     className={`shrink-0 rounded-full px-2 py-0.5 text-[0.62rem] font-bold tabular-nums ${folderBadgeClasses(f.badge)}`}
                   >

@@ -71,10 +71,14 @@ import {
 import {
   fetchOutlookConnectUrl,
   disconnectOutlookAccount as disconnectOutlookAccountApi,
+  fetchOutlookFolderStats,
   getOutlookThread,
   listOutlookAccounts,
   listOutlookThreads,
+  syncOutlookMailbox,
   type OutlookAccount,
+  type OutlookSyncRemoval,
+  type OutlookSyncThread,
   type OutlookThreadItem,
   sendOutlookMessage,
   replyOutlookMessage,
@@ -83,6 +87,11 @@ import {
   batchModifyOutlookThreads,
   trashOutlookThreads,
 } from "./outlook-api";
+import {
+  purgeInboxCache,
+  readInboxCache,
+  writeInboxCache,
+} from "../inbox/inbox-cache";
 import { getBackendContacts, saveBackendContacts } from "./contacts-api";
 import { getBackendCompanies, saveBackendCompanies } from "./companies-api";
 import { getBackendEmailMeta, saveBackendEmailMeta } from "./emails-api";
@@ -128,25 +137,14 @@ export type SendCrmEmailInput = {
 };
 
 export type OutlookSyncOptions = {
-  /** Lightweight INBOX/SENT poll — preserves load-more threads. */
+  /** Lightweight INBOX delta poll — preserves load-more threads. */
   background?: boolean;
+  /** Sync only these folder label ids (e.g. INBOX). */
+  folders?: string[];
 };
 
 const OUTLOOK_POLL_INTERVAL_MS = 30_000;
-
-const OUTLOOK_FOLDER_SOURCES = [
-  { labelId: "INBOX", mailboxLabel: "INBOX" },
-  { labelId: "SENT", mailboxLabel: "SENT" },
-  { labelId: "DRAFT", mailboxLabel: "DRAFT" },
-  { labelId: "JUNK", mailboxLabel: "JUNK" },
-  { labelId: "ARCHIVE", mailboxLabel: "ARCHIVE" },
-  { labelId: "TRASH", mailboxLabel: "TRASH" },
-  { labelId: "OUTBOX", mailboxLabel: "OUTBOX" },
-  {
-    labelId: "CONVERSATION_HISTORY",
-    mailboxLabel: "CONVERSATION_HISTORY",
-  },
-] as const;
+const FOLDER_STALE_MS = 60_000;
 
 type CrmContextValue = CrmState & {
   hydrated: boolean;
@@ -154,8 +152,13 @@ type CrmContextValue = CrmState & {
   masterDataRevision: number;
   crmSynced: boolean;
   outlookInboxSyncing: boolean;
+  outlookInboxBootstrapping: boolean;
   outlookInboxLastSyncedAt: string | null;
   outlookSyncError: string | null;
+  outlookFolderStats: Record<
+    string,
+    { unreadItemCount: number; totalItemCount: number; loaded: true }
+  >;
   saveFromDiscovery: (input: SaveFromDiscoveryInput) => {
     companyId: string;
     contactId: string | null;
@@ -199,6 +202,9 @@ type CrmContextValue = CrmState & {
     preferredEmail?: string | null,
     options?: OutlookSyncOptions
   ) => Promise<void>;
+  syncOutlookFolder: (folder: InboxFolderName) => Promise<void>;
+  trackOutlookSelectedThread: (threadId: string | null) => void;
+  hydrateOutlookThread: (threadId: string) => Promise<void>;
   switchOutlookAccount: (accountId: string) => Promise<void>;
   /** True when Graph has another page for this folder. */
   inboxFolderHasMore: (folder: InboxFolderName) => boolean;
@@ -326,6 +332,63 @@ function preferSyncedEmailRow(a: CrmEmail, b: CrmEmail): CrmEmail {
   return other.leadId && !pick.leadId ? { ...pick, leadId: other.leadId } : pick;
 }
 
+function isListOnlyEmail(email: CrmEmail): boolean {
+  return email.bodyLoaded === false;
+}
+
+/** List-only poll must not wipe hydrated body/attachments (pass 2 blocker). */
+function mergeOutlookEmailRows(existing: CrmEmail, incoming: CrmEmail): CrmEmail {
+  const pick = preferSyncedEmailRow(existing, incoming);
+  const other = pick === existing ? incoming : existing;
+  if (other.bodyLoaded === true && isListOnlyEmail(pick)) {
+    return {
+      ...pick,
+      body: other.body,
+      attachments: other.attachments,
+      bodyLoaded: true,
+      messageId: pick.messageId ?? other.messageId,
+      leadId: pick.leadId ?? other.leadId,
+    };
+  }
+  if (pick.bodyLoaded !== true && other.bodyLoaded === true && !isListOnlyEmail(other)) {
+    return other;
+  }
+  return pick;
+}
+
+// ponytail: dev-only — list-only poll must not wipe hydrated body.
+function assertMergePreservesHydration(): void {
+  const hydrated: CrmEmail = {
+    id: "outlook-t1",
+    leadId: null,
+    threadId: "t1",
+    messageId: "m1",
+    direction: "inbound",
+    subject: "Hi",
+    body: "Full body text",
+    preview: "Full",
+    fromEmail: "a@b.com",
+    toEmail: "me@co.com",
+    sentAt: "2026-07-29T10:00:00Z",
+    bodyLoaded: true,
+    attachments: [{ filename: "a.pdf", mimeType: "application/pdf", size: 1 }],
+  };
+  const listOnly: CrmEmail = {
+    ...hydrated,
+    body: "",
+    preview: "Snippet",
+    bodyLoaded: false,
+    attachments: undefined,
+  };
+  const merged = mergeOutlookEmailRows(hydrated, listOnly);
+  if (merged.body !== "Full body text" || !merged.bodyLoaded) {
+    throw new Error("mergeOutlookEmailRows hydration preserve failed");
+  }
+}
+if (process.env.NODE_ENV === "development") {
+  assertMergePreservesHydration();
+}
+
 function mergeEmailMeta(a: CrmEmailMeta, b: CrmEmailMeta): CrmEmailMeta {
   return {
     id: a.id,
@@ -446,13 +509,18 @@ function mergeBackgroundSyncEmails(
 ): CrmEmail[] {
   const syncedThreads = new Set(synced.map((e) => e.threadId));
   const syncedIds = new Set(synced.map((e) => e.id));
+  const prevByThread = new Map(prevEmails.map((e) => [e.threadId, e]));
+  const mergedSynced = synced.map((email) => {
+    const existing = prevByThread.get(email.threadId);
+    return existing ? mergeOutlookEmailRows(existing, email) : email;
+  });
   const extras = prevEmails.filter(
     (prev) =>
       !isLocalOnlyCrmEmail(prev) &&
       !syncedIds.has(prev.id) &&
       !syncedThreads.has(prev.threadId)
   );
-  return dedupeEmailsByThread([...synced, ...extras]).sort((a, b) =>
+  return dedupeEmailsByThread([...mergedSynced, ...extras]).sort((a, b) =>
     b.sentAt.localeCompare(a.sentAt)
   );
 }
@@ -467,7 +535,7 @@ export function dedupeEmailsByThread(emails: CrmEmail[]): CrmEmail[] {
     const existing = byFingerprint.get(fp);
     byFingerprint.set(
       fp,
-      existing ? preferSyncedEmailRow(existing, email) : email
+      existing ? mergeOutlookEmailRows(existing, email) : email
     );
   }
 
@@ -476,7 +544,7 @@ export function dedupeEmailsByThread(emails: CrmEmail[]): CrmEmail[] {
     const existing = byThread.get(email.threadId);
     byThread.set(
       email.threadId,
-      existing ? preferSyncedEmailRow(existing, email) : email
+      existing ? mergeOutlookEmailRows(existing, email) : email
     );
   }
   return [...byThread.values()];
@@ -586,10 +654,115 @@ type InboxFolderPagination = {
   nextPageToken: string | null;
 };
 
+type FolderSyncState = {
+  loadedAt: number;
+  nextPageToken: string | null;
+};
+
 type ThreadBucketItem = {
   thread: OutlookThreadItem;
   mailboxLabels: Set<string>;
 };
+
+function buildCrmEmailFromListItem(
+  item: ThreadBucketItem,
+  accountEmail: string
+): CrmEmail {
+  const threadId = item.thread.threadId || item.thread.id;
+  const fromEmail = extractEmailAddress(item.thread.from);
+  const toEmail = extractEmailAddress(item.thread.to) || accountEmail;
+  const direction = fromEmail === accountEmail ? "outbound" : "inbound";
+  const isGraphImportant =
+    item.thread.labelIds?.includes("IMPORTANT") ||
+    item.thread.importance === "high" ||
+    item.thread.inferenceClassification === "focused";
+
+  return {
+    id: outlookEmailId(threadId),
+    leadId: null,
+    threadId,
+    messageId: item.thread.lastMessageId ?? null,
+    direction,
+    mailboxLabels: [...item.mailboxLabels],
+    importance: isGraphImportant
+      ? "high"
+      : item.thread.importance === "low" ||
+          item.thread.importance === "normal" ||
+          item.thread.importance === "high"
+        ? (item.thread.importance as "low" | "normal" | "high")
+        : undefined,
+    outlookCategories: item.thread.categories?.length
+      ? item.thread.categories
+      : undefined,
+    subject: item.thread.subject ?? "(No subject)",
+    body: "",
+    preview: (item.thread.snippet ?? "").slice(0, 120),
+    fromEmail: fromEmail || accountEmail,
+    toEmail,
+    sentAt: item.thread.date ?? new Date().toISOString(),
+    bodyLoaded: false,
+  };
+}
+
+function buildCrmEmailFromSyncThread(
+  thread: OutlookSyncThread,
+  accountEmail: string
+): CrmEmail {
+  return buildCrmEmailFromListItem(
+    {
+      thread,
+      mailboxLabels: new Set(thread.mailboxLabels),
+    },
+    accountEmail
+  );
+}
+
+function applyDeltaRemovals(
+  emails: CrmEmail[],
+  removals: OutlookSyncRemoval[]
+): CrmEmail[] {
+  if (!removals.length) return emails;
+  let next = [...emails];
+  for (const removal of removals) {
+    next = next
+      .map((email) => {
+        const matchesThread =
+          email.threadId === removal.conversationId ||
+          (removal.messageId &&
+            (email.messageId === removal.messageId ||
+              email.threadId === removal.messageId));
+        if (!matchesThread) return email;
+        const labels = new Set(email.mailboxLabels ?? []);
+        labels.delete(removal.folder);
+        if (labels.size === 0) return null;
+        return {
+          ...email,
+          mailboxLabels: [...labels],
+          bodyLoaded: email.bodyLoaded ? false : email.bodyLoaded,
+          body: email.bodyLoaded ? "" : email.body,
+        };
+      })
+      .filter((email): email is CrmEmail => Boolean(email));
+  }
+  return next;
+}
+
+function applyUnreadMetaForNewThreads(
+  prevMeta: CrmEmailMeta[],
+  prevEmails: CrmEmail[],
+  incoming: CrmEmail[],
+  unreadByThread: Map<string, boolean>
+): CrmEmailMeta[] {
+  const prevThreadIds = new Set(prevEmails.map((e) => e.threadId));
+  let meta = prevMeta;
+  for (const email of incoming) {
+    if (prevThreadIds.has(email.threadId)) continue;
+    const isUnread = unreadByThread.get(email.threadId);
+    if (isUnread === undefined) continue;
+    meta = upsertEmailMeta(meta, email.id, { read: !isUnread });
+  }
+  return meta;
+}
 
 function inboxFolderPaginationKey(accountId: string, labelId: string): string {
   return `${accountId}:${labelId}`;
@@ -685,6 +858,7 @@ function buildCrmEmailFromThreadItem(
     sentAt:
       latestMessage?.date ?? item.thread.date ?? new Date().toISOString(),
     attachments,
+    bodyLoaded: true,
   };
 }
 
@@ -738,6 +912,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
   const [inboxFolderPagination, setInboxFolderPagination] = useState<
     Record<string, InboxFolderPagination>
   >({});
+  const inboxFolderPaginationRef = useRef(inboxFolderPagination);
+  useEffect(() => {
+    inboxFolderPaginationRef.current = inboxFolderPagination;
+  }, [inboxFolderPagination]);
   const [loadingMoreInboxFolder, setLoadingMoreInboxFolder] =
     useState<InboxFolderName | null>(null);
   const loadingMoreInboxFolderRef = useRef<InboxFolderName | null>(null);
@@ -754,6 +932,16 @@ export function CrmProvider({ children }: { children: ReactNode }) {
     ) => Promise<void>
   >(() => Promise.resolve());
   const [outlookInboxSyncing, setOutlookInboxSyncing] = useState(false);
+  const [outlookInboxBootstrapping, setOutlookInboxBootstrapping] = useState(false);
+  const [outlookFolderStats, setOutlookFolderStats] = useState<
+    Record<string, { unreadItemCount: number; totalItemCount: number; loaded: true }>
+  >({});
+  const [folderSyncState, setFolderSyncState] = useState<
+    Record<string, FolderSyncState>
+  >({});
+  const folderSyncStateRef = useRef<Record<string, FolderSyncState>>({});
+  const selectedThreadIdRef = useRef<string | null>(null);
+  const hydratingThreadRef = useRef<Set<string>>(new Set());
   const [outlookInboxLastSyncedAt, setOutlookInboxLastSyncedAt] = useState<
     string | null
   >(null);
@@ -807,6 +995,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       templatesLoadedRef.current = false;
       templatesSyncedRef.current = false;
       setMasterDataSynced(false);
+      purgeInboxCache(authUserRef.current);
       setAuthUserId(nextUserId);
     };
 
@@ -2411,16 +2600,15 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       options?: OutlookSyncOptions
     ) => {
       const background = options?.background ?? false;
-      if (background && outlookSyncInFlightRef.current) return;
+      if (outlookSyncInFlightRef.current) return;
 
       outlookSyncInFlightRef.current = true;
-      setOutlookInboxSyncing(true);
+      if (!background) setOutlookInboxSyncing(true);
       if (!background) setOutlookSyncError(null);
 
-      // Newest sync wins. Switching A -> B -> A can leave an older sync in
-      // flight; without this its stale threads would land on top of B's.
       const seq = ++outlookSyncSeqRef.current;
       const isStale = () => seq !== outlookSyncSeqRef.current;
+      const userId = authUserRef.current;
 
       let accountEmail = "";
       try {
@@ -2445,6 +2633,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           accounts.find((a) => a.status === "active") ??
           accounts[0];
         if (!account) {
+          purgeInboxCache(userId);
           patch((prev) => ({
             ...prev,
             outlookConnected: false,
@@ -2457,10 +2646,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         }
 
         accountEmail = account.email;
+        const normalizedAccountEmail = account.email.toLowerCase();
+        const accountSwitched = account.id !== outlookAccountIdRef.current;
 
-        // Token undecryptable / refresh-token revoked: the backend flips the
-        // account to status "error", then every Graph call 401s and gets
-        // swallowed → silent empty inbox. Surface a reconnect prompt instead.
         if (account.status !== "active") {
           patch((prev) => ({
             ...prev,
@@ -2479,211 +2667,182 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // Select the account before the threads land. The mailbox takes a second
-        // to fetch; without this the rail keeps the old account highlighted the
-        // whole time and the click reads as "nothing happened".
-        patch((prev) => ({
-          ...prev,
-          outlookConnected: true,
-          outlookAccountId: account.id,
-          outlookEmail: account.email,
-          outlookAccounts: accounts,
-          ...(account.id === prev.outlookAccountId ? {} : { emails: [] }),
-        }));
-        if (!background && account.id !== outlookAccountIdRef.current) {
-          setInboxFolderPagination({});
+        if (accountSwitched) {
+          purgeInboxCache(userId, outlookAccountIdRef.current ?? undefined);
         }
 
-        const folderSources = background
-          ? OUTLOOK_FOLDER_SOURCES.filter(
-              (source) =>
-                source.labelId === "INBOX" || source.labelId === "SENT"
-            )
-          : OUTLOOK_FOLDER_SOURCES;
-        const threadBuckets = new Map<
-          string,
-          { thread: OutlookThreadItem; mailboxLabels: Set<string> }
-        >();
-        const nextFolderPagination: Record<string, InboxFolderPagination> = {};
-
-        const ingestFolderThreads = (
-          source: (typeof folderSources)[number],
-          folderThreadsRes: Awaited<ReturnType<typeof listOutlookThreads>>
-        ) => {
-          if (!folderThreadsRes.live) return;
-          nextFolderPagination[
-            inboxFolderPaginationKey(account.id, source.labelId)
-          ] = {
-            nextPageToken: folderThreadsRes.data.nextPageToken,
-          };
-          for (const thread of folderThreadsRes.data.threads) {
-            const key = thread.threadId || thread.id;
-            const existing = threadBuckets.get(key);
-            if (!existing) {
-              threadBuckets.set(key, {
-                thread,
-                mailboxLabels: new Set([source.mailboxLabel]),
-              });
-              continue;
-            }
-            existing.mailboxLabels.add(source.mailboxLabel);
-            const existingDate = existing.thread.date ?? "";
-            const incomingDate = thread.date ?? "";
-            if (incomingDate > existingDate) {
-              existing.thread = thread;
-            }
-          }
-        };
-
-        // INBOX/SENT first — Graph throttles when all seven folders fire at once.
-        const primarySources = folderSources.filter(
-          (source) => source.labelId === "INBOX" || source.labelId === "SENT"
-        );
-        const secondarySources = folderSources.filter(
-          (source) => source.labelId !== "INBOX" && source.labelId !== "SENT"
-        );
-        const primaryResults = await Promise.all(
-          primarySources.map((source) =>
-            listOutlookThreads(account.id, 25, source.labelId)
-          )
-        );
-        if (isStale()) return;
-        primarySources.forEach((source, i) =>
-          ingestFolderThreads(source, primaryResults[i])
-        );
-
-        if (secondarySources.length > 0) {
-          const secondaryResults = await Promise.all(
-            secondarySources.map((source) =>
-              listOutlookThreads(account.id, 25, source.labelId)
-            )
-          );
-          if (isStale()) return;
-          secondarySources.forEach((source, i) =>
-            ingestFolderThreads(source, secondaryResults[i])
-          );
-        }
-
-        for (const bucket of threadBuckets.values()) {
-          if (
-            bucket.mailboxLabels.has("DRAFT") &&
-            (bucket.mailboxLabels.has("INBOX") ||
-              bucket.mailboxLabels.has("SENT"))
-          ) {
-            bucket.mailboxLabels.delete("DRAFT");
-          }
-        }
-
-        if (threadBuckets.size === 0) {
-          const allThreadsRes = await listOutlookThreads(account.id, 25);
-          if (!allThreadsRes.live) {
-            if (isStale()) return;
-            // Keep the last good mailbox on transient Graph errors.
-            patch((prev) => ({
-              ...prev,
-              outlookConnected: true,
-              outlookAccountId: account.id,
-              outlookEmail: account.email,
-              outlookAccounts: accounts,
-            }));
-            if (!background) setOutlookSyncError(allThreadsRes.error);
-            return;
-          }
-          for (const thread of allThreadsRes.data.threads) {
-            const key = thread.threadId || thread.id;
-            threadBuckets.set(key, {
-              thread,
-              mailboxLabels: new Set<string>(),
-            });
-          }
-        }
-
-        const normalizedAccountEmail = account.email.toLowerCase();
-        const allThreadItems = [...threadBuckets.values()].sort((a, b) => {
-          const ta = new Date(a.thread.date ?? 0).getTime();
-          const tb = new Date(b.thread.date ?? 0).getTime();
-          return tb - ta;
-        });
-
-        let rankedThreads: typeof allThreadItems;
-        if (background) {
-          rankedThreads = allThreadItems.slice(0, 25);
-        } else {
-          const SYNC_THREAD_CAP = 50;
-          const MIN_REGULAR_SYNC_SLOTS = 30;
-          const ARCHIVE_TRASH_SYNC_CAP = 20;
-          const archiveTrashThreads = allThreadItems.filter(
-            (item) =>
-              item.mailboxLabels.has("ARCHIVE") ||
-              item.mailboxLabels.has("TRASH")
-          );
-          const regularThreads = allThreadItems.filter(
-            (item) =>
-              !item.mailboxLabels.has("ARCHIVE") &&
-              !item.mailboxLabels.has("TRASH")
-          );
-          const cappedArchiveTrash = archiveTrashThreads.slice(
-            0,
-            ARCHIVE_TRASH_SYNC_CAP
-          );
-          const regularBudget = Math.max(
-            MIN_REGULAR_SYNC_SLOTS,
-            SYNC_THREAD_CAP - cappedArchiveTrash.length
-          );
-          rankedThreads = [
-            ...regularThreads.slice(0, regularBudget),
-            ...cappedArchiveTrash,
-          ].slice(0, SYNC_THREAD_CAP);
-        }
-
-        // One request per thread, but all in flight at once. Serially this was
-        // ~25 round trips to Graph back-to-back — the bulk of the switch delay.
-        const threadDetails = await Promise.all(
-          rankedThreads.map((item) =>
-            getOutlookThread(account.id, item.thread.threadId || item.thread.id)
-          )
-        );
-        if (isStale()) return;
-
-        const syncedEmails: CrmEmail[] = [];
-        rankedThreads.forEach((item, i) => {
-          const email = buildCrmEmailFromThreadItem(
-            item,
-            threadDetails[i],
-            normalizedAccountEmail
-          );
-          if (email) syncedEmails.push(email);
-        });
-
-        syncedEmails.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
-        const dedupedEmails = dedupeEmailsByThread(syncedEmails);
-        if (isStale()) return;
-
-        if (background) {
-          setInboxFolderPagination((prev) => ({
-            ...prev,
-            ...nextFolderPagination,
-          }));
-        } else {
-          setInboxFolderPagination(nextFolderPagination);
-        }
+        const cached =
+          !background && userId
+            ? readInboxCache(userId, account.id)
+            : null;
 
         patch((prev) => {
-          const emailMeta = reconcileEmailMetaAfterSync(
-            prev.emailMeta,
-            prev.emails,
-            dedupedEmails
-          );
-          const mergedEmails = background
-            ? mergeBackgroundSyncEmails(dedupedEmails, prev.emails)
-            : mergeFlaggedEmails(dedupedEmails, prev.emails, emailMeta);
+          const keepEmails =
+            account.id === prev.outlookAccountId && prev.emails.length > 0;
+          const fromCache = cached && !keepEmails ? cached.emails : null;
           return {
             ...prev,
             outlookConnected: true,
             outlookAccountId: account.id,
             outlookEmail: account.email,
             outlookAccounts: accounts,
-            emails: applyEmailMeta(mergedEmails, emailMeta),
+            ...(fromCache
+              ? { emails: applyEmailMeta(fromCache, prev.emailMeta) }
+              : accountSwitched
+                ? { emails: [] }
+                : {}),
+          };
+        });
+
+        if (cached && !background) {
+          setInboxFolderPagination(cached.folderPagination);
+          setOutlookInboxLastSyncedAt(cached.lastSyncedAt);
+          for (const email of cached.emails) {
+            if (email.direction !== "inbound") continue;
+            if (!email.mailboxLabels?.includes("INBOX")) continue;
+            prevInboundSnapshotRef.current.set(email.threadId, {
+              messageId: email.messageId ?? null,
+              sentAt: email.sentAt,
+            });
+          }
+          prevInboundAccountIdRef.current = account.id;
+          setOutlookInboxBootstrapping(false);
+        } else if (!background && accountSwitched) {
+          setOutlookInboxBootstrapping(true);
+          setInboxFolderPagination({});
+          setFolderSyncState({});
+          folderSyncStateRef.current = {};
+        } else if (!background) {
+          setOutlookInboxBootstrapping((prev) => {
+            // keep false if rows already visible
+            return prev;
+          });
+        }
+
+        if (!background && !cached) {
+          setOutlookInboxBootstrapping(true);
+        }
+
+        outlookAccountIdRef.current = account.id;
+
+        // Phase A: INBOX list-only for instant paint on full sync.
+        if (!background) {
+          const inboxListRes = await listOutlookThreads(account.id, 25, "INBOX");
+          if (isStale()) return;
+          if (inboxListRes.live) {
+            const inboxEmails = inboxListRes.data.threads.map((thread) =>
+              buildCrmEmailFromListItem(
+                { thread, mailboxLabels: new Set(["INBOX"]) },
+                normalizedAccountEmail
+              )
+            );
+            setInboxFolderPagination((prev) => ({
+              ...prev,
+              [inboxFolderPaginationKey(account.id, "INBOX")]: {
+                nextPageToken: inboxListRes.data.nextPageToken,
+              },
+            }));
+            setFolderSyncState((prev) => ({
+              ...prev,
+              [`${account.id}:INBOX`]: {
+                loadedAt: Date.now(),
+                nextPageToken: inboxListRes.data.nextPageToken,
+              },
+            }));
+            folderSyncStateRef.current[`${account.id}:INBOX`] = {
+              loadedAt: Date.now(),
+              nextPageToken: inboxListRes.data.nextPageToken,
+            };
+
+            patch((prev) => {
+              const unreadByThread = new Map(
+                inboxListRes.data.threads.map((t) => [
+                  t.threadId || t.id,
+                  t.isUnread,
+                ])
+              );
+              let emailMeta = applyUnreadMetaForNewThreads(
+                prev.emailMeta,
+                prev.emails,
+                inboxEmails,
+                unreadByThread
+              );
+              emailMeta = reconcileEmailMetaAfterSync(
+                emailMeta,
+                prev.emails,
+                inboxEmails
+              );
+              const merged = dedupeEmailsByThread([
+                ...inboxEmails,
+                ...prev.emails,
+              ]).sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+              return {
+                ...prev,
+                emails: applyEmailMeta(merged, emailMeta),
+                emailMeta,
+              };
+            });
+            setOutlookInboxBootstrapping(false);
+          }
+        }
+
+        const syncRes = await syncOutlookMailbox({
+          accountId: account.id,
+          folders: options?.folders,
+          mode: background ? "delta" : "bootstrap",
+        });
+        if (isStale()) return;
+
+        if (!syncRes.live) {
+          if (!background) setOutlookSyncError(syncRes.error);
+          return;
+        }
+
+        const unreadByThread = new Map(
+          syncRes.data.threads.map((t) => [t.threadId, t.isUnread])
+        );
+        const syncedEmails = syncRes.data.threads.map((thread) =>
+          buildCrmEmailFromSyncThread(thread, normalizedAccountEmail)
+        );
+        syncedEmails.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+        const dedupedEmails = dedupeEmailsByThread(syncedEmails);
+        if (isStale()) return;
+
+        const syncedAt = new Date().toISOString();
+        let mergedForCache: CrmEmail[] = [];
+        patch((prev) => {
+          let working = applyDeltaRemovals(prev.emails, syncRes.data.removed);
+          let emailMeta = applyUnreadMetaForNewThreads(
+            prev.emailMeta,
+            prev.emails,
+            dedupedEmails,
+            unreadByThread
+          );
+          emailMeta = reconcileEmailMetaAfterSync(
+            emailMeta,
+            prev.emails,
+            dedupedEmails
+          );
+          const selectedThreadId = selectedThreadIdRef.current;
+          const updatedThreadIds = new Set(dedupedEmails.map((e) => e.threadId));
+          if (selectedThreadId && updatedThreadIds.has(selectedThreadId)) {
+            working = working.map((email) =>
+              email.threadId === selectedThreadId && email.bodyLoaded
+                ? { ...email, bodyLoaded: false, body: "" }
+                : email
+            );
+          }
+          const mergedEmails = background
+            ? mergeBackgroundSyncEmails(dedupedEmails, working)
+            : mergeFlaggedEmails(dedupedEmails, working, emailMeta);
+          mergedForCache = applyEmailMeta(mergedEmails, emailMeta);
+          return {
+            ...prev,
+            outlookConnected: true,
+            outlookAccountId: account.id,
+            outlookEmail: account.email,
+            outlookAccounts: accounts,
+            emails: mergedForCache,
             emailMeta,
           };
         });
@@ -2692,10 +2851,43 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         await emitInboundEmailNotifications(dedupedEmails, account.id);
         await clearOutlookErrorNotification(account.id);
 
-        setOutlookInboxLastSyncedAt(new Date().toISOString());
+        setOutlookInboxLastSyncedAt(syncedAt);
+
+        if (userId && mergedForCache.length > 0) {
+          writeInboxCache(userId, account.id, {
+            emails: mergedForCache,
+            lastSyncedAt: syncedAt,
+            folderPagination: inboxFolderPaginationRef.current,
+          });
+        }
+
+        void fetchOutlookFolderStats(account.id).then((statsRes) => {
+          if (statsRes.live) setOutlookFolderStats(statsRes.data.folders);
+        });
+
+        if (!background) {
+          void listOutlookThreads(account.id, 25, "SENT").then((sentRes) => {
+            if (!sentRes.live || isStale()) return;
+            const sentEmails = sentRes.data.threads.map((thread) =>
+              buildCrmEmailFromListItem(
+                { thread, mailboxLabels: new Set(["SENT"]) },
+                normalizedAccountEmail
+              )
+            );
+            patch((prev) => {
+              const merged = mergeBackgroundSyncEmails(sentEmails, prev.emails);
+              return { ...prev, emails: applyEmailMeta(merged, prev.emailMeta) };
+            });
+            setFolderSyncState((prev) => ({
+              ...prev,
+              [`${account.id}:SENT`]: {
+                loadedAt: Date.now(),
+                nextPageToken: sentRes.data.nextPageToken,
+              },
+            }));
+          });
+        }
       } catch (err) {
-        // The path used to be catch-less: any thrown error vanished at the
-        // `void syncOutlookInbox()` call site, leaving an empty inbox and no clue.
         if (!background) {
           setOutlookSyncError(
             err instanceof Error ? err.message : "Couldn't load your inbox."
@@ -2709,13 +2901,15 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       } finally {
         outlookSyncInFlightRef.current = false;
         setOutlookInboxSyncing(false);
+        setOutlookInboxBootstrapping(false);
       }
     },
-    // Deliberately not depending on state.outlookAccountId: the selected
-    // account is read through a ref instead. As a dependency it changed this
-    // callback's identity on every sync, which re-fired the bootstrap effect
-    // that depends on it, which synced again — 2-3x the requests per switch.
-    [patch, emitInboundEmailNotifications, emitOutlookErrorNotification, clearOutlookErrorNotification]
+    [
+      patch,
+      emitInboundEmailNotifications,
+      emitOutlookErrorNotification,
+      clearOutlookErrorNotification,
+    ]
   );
 
   syncOutlookInboxRef.current = syncOutlookInbox;
@@ -2726,8 +2920,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated || !authUserId) return;
-    void syncOutlookInbox(null, null);
-  }, [hydrated, authUserId, syncOutlookInbox]);
+    void syncOutlookInboxRef.current(null, null);
+    // ponytail: ref not callback — pagination updates used to recreate this fn and re-bootstrap in a loop
+  }, [hydrated, authUserId]);
 
   useEffect(() => {
     if (
@@ -2743,7 +2938,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
     const tick = () => {
       if (typeof document !== "undefined" && document.hidden) return;
-      void syncOutlookInbox(null, null, { background: true });
+      void syncOutlookInboxRef.current(null, null, { background: true });
     };
 
     const startPolling = () => {
@@ -2775,13 +2970,125 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       stopPolling();
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [
-    hydrated,
-    authUserId,
-    state.outlookConnected,
-    state.outlookAccountId,
-    syncOutlookInbox,
-  ]);
+  }, [hydrated, authUserId, state.outlookConnected, state.outlookAccountId]);
+
+  const trackOutlookSelectedThread = useCallback((threadId: string | null) => {
+    selectedThreadIdRef.current = threadId;
+  }, []);
+
+  const hydrateOutlookThread = useCallback(
+    async (threadId: string) => {
+      const accountId = outlookAccountIdRef.current;
+      const accountEmail = (state.outlookEmail ?? "").toLowerCase();
+      if (!accountId || !accountEmail || !threadId) return;
+      if (hydratingThreadRef.current.has(threadId)) return;
+
+      const existing = state.emails.find((e) => e.threadId === threadId);
+      if (existing?.bodyLoaded) return;
+
+      hydratingThreadRef.current.add(threadId);
+      try {
+        const detailRes = await getOutlookThread(accountId, threadId);
+        if (!detailRes.live) return;
+
+        const item: ThreadBucketItem = {
+          thread: {
+            id: threadId,
+            threadId,
+            snippet: existing?.preview ?? "",
+            from: existing?.fromEmail ?? "",
+            to: existing?.toEmail ?? "",
+            subject: existing?.subject ?? "",
+            date: existing?.sentAt ?? null,
+            isUnread: false,
+            lastMessageId: existing?.messageId ?? undefined,
+          },
+          mailboxLabels: new Set(existing?.mailboxLabels ?? ["INBOX"]),
+        };
+        const hydrated = buildCrmEmailFromThreadItem(
+          item,
+          detailRes,
+          accountEmail
+        );
+        if (!hydrated) return;
+
+        patch((prev) => {
+          const merged = prev.emails.map((email) =>
+            email.threadId === threadId
+              ? mergeOutlookEmailRows(email, hydrated)
+              : email
+          );
+          return {
+            ...prev,
+            emails: applyEmailMeta(merged, prev.emailMeta),
+          };
+        });
+      } finally {
+        hydratingThreadRef.current.delete(threadId);
+      }
+    },
+    [patch, state.emails, state.outlookEmail]
+  );
+
+  const syncOutlookFolder = useCallback(
+    async (folder: InboxFolderName) => {
+      const accountId = outlookAccountIdRef.current;
+      const accountEmail = (state.outlookEmail ?? "").toLowerCase();
+      if (!accountId || !accountEmail) return;
+
+      const labelId = INBOX_FOLDER_LABEL_IDS[folder];
+      const stateKey = `${accountId}:${labelId}`;
+      const folderState = folderSyncStateRef.current[stateKey];
+      if (
+        folderState &&
+        Date.now() - folderState.loadedAt < FOLDER_STALE_MS
+      ) {
+        return;
+      }
+
+      const listRes = await listOutlookThreads(accountId, 25, labelId);
+      if (!listRes.live) return;
+
+      const listEmails = listRes.data.threads.map((thread) =>
+        buildCrmEmailFromListItem(
+          { thread, mailboxLabels: new Set([labelId]) },
+          accountEmail
+        )
+      );
+
+      setInboxFolderPagination((prev) => ({
+        ...prev,
+        [inboxFolderPaginationKey(accountId, labelId)]: {
+          nextPageToken: listRes.data.nextPageToken,
+        },
+      }));
+      const nextFolderState = {
+        loadedAt: Date.now(),
+        nextPageToken: listRes.data.nextPageToken,
+      };
+      folderSyncStateRef.current[stateKey] = nextFolderState;
+      setFolderSyncState((prev) => ({ ...prev, [stateKey]: nextFolderState }));
+
+      patch((prev) => {
+        const unreadByThread = new Map(
+          listRes.data.threads.map((t) => [t.threadId || t.id, t.isUnread])
+        );
+        let emailMeta = applyUnreadMetaForNewThreads(
+          prev.emailMeta,
+          prev.emails,
+          listEmails,
+          unreadByThread
+        );
+        const merged = mergeBackgroundSyncEmails(listEmails, prev.emails);
+        return {
+          ...prev,
+          emails: applyEmailMeta(merged, emailMeta),
+          emailMeta,
+        };
+      });
+    },
+    [patch, state.outlookEmail]
+  );
 
   const switchOutlookAccount = useCallback(
     async (accountId: string) => {
@@ -2838,32 +3145,29 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        let loadedEmails: CrmEmail[] = [];
-        if (newItems.length > 0) {
-          const threadDetails = await Promise.all(
-            newItems.map((item) =>
-              getOutlookThread(
-                accountId,
-                item.thread.threadId || item.thread.id
-              )
-            )
-          );
-          loadedEmails = newItems
-            .map((item, i) =>
-              buildCrmEmailFromThreadItem(item, threadDetails[i], accountEmail)
-            )
-            .filter((email): email is CrmEmail => Boolean(email));
-        }
+        const loadedEmails = newItems.map((item) =>
+          buildCrmEmailFromListItem(item, accountEmail)
+        );
 
         if (loadedEmails.length > 0) {
           patch((prev) => {
-            const combined = dedupeEmailsByThread([
-              ...prev.emails,
-              ...loadedEmails,
-            ]).sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+            const unreadByThread = new Map(
+              threadsRes.data.threads.map((t) => [
+                t.threadId || t.id,
+                t.isUnread,
+              ])
+            );
+            let emailMeta = applyUnreadMetaForNewThreads(
+              prev.emailMeta,
+              prev.emails,
+              loadedEmails,
+              unreadByThread
+            );
+            const combined = mergeBackgroundSyncEmails(loadedEmails, prev.emails);
             return {
               ...prev,
-              emails: applyEmailMeta(combined, prev.emailMeta),
+              emails: applyEmailMeta(combined, emailMeta),
+              emailMeta,
             };
           });
         }
@@ -2897,6 +3201,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       if (targetId) {
         await disconnectOutlookAccountApi(targetId);
       }
+      purgeInboxCache(authUserRef.current, targetId ?? undefined);
 
       const accountsRes = await listOutlookAccounts();
       const remaining = accountsRes.live
@@ -2918,6 +3223,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       }));
       if (!nextAccount) {
         setInboxFolderPagination({});
+        setFolderSyncState({});
+        folderSyncStateRef.current = {};
+        purgeInboxCache(authUserRef.current);
       }
     },
     [patch, state.outlookAccountId]
@@ -3152,8 +3460,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       masterDataRevision,
       crmSynced,
       outlookInboxSyncing,
+      outlookInboxBootstrapping,
       outlookInboxLastSyncedAt,
       outlookSyncError,
+      outlookFolderStats,
       saveFromDiscovery,
       createLeadWithCompany,
       updateLeadWithCompany,
@@ -3175,6 +3485,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       connectOutlook,
       disconnectOutlook,
       syncOutlookInbox,
+      syncOutlookFolder,
+      trackOutlookSelectedThread,
+      hydrateOutlookThread,
       switchOutlookAccount,
       inboxFolderHasMore,
       loadingMoreInboxFolder,
@@ -3238,8 +3551,10 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       masterDataRevision,
       crmSynced,
       outlookInboxSyncing,
+      outlookInboxBootstrapping,
       outlookInboxLastSyncedAt,
       outlookSyncError,
+      outlookFolderStats,
       saveFromDiscovery,
       createLeadWithCompany,
       updateLeadWithCompany,
@@ -3261,6 +3576,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       connectOutlook,
       disconnectOutlook,
       syncOutlookInbox,
+      syncOutlookFolder,
+      trackOutlookSelectedThread,
+      hydrateOutlookThread,
       switchOutlookAccount,
       inboxFolderHasMore,
       loadingMoreInboxFolder,

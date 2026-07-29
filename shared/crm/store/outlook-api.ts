@@ -32,6 +32,10 @@ export type OutlookThreadItem = {
   date: string | null;
   labelIds?: string[];
   isUnread: boolean;
+  lastMessageId?: string;
+  importance?: string;
+  inferenceClassification?: string;
+  categories?: string[];
 };
 
 export type OutlookThread = {
@@ -95,6 +99,45 @@ export async function listOutlookThreads(
   }
   return apiGet<{ threads: OutlookThreadItem[]; nextPageToken: string | null }>(
     `/v1/email/threads?${params.toString()}`
+  );
+}
+
+export type OutlookSyncRemoval = {
+  folder: string;
+  conversationId: string;
+  messageId?: string;
+};
+
+export type OutlookSyncThread = OutlookThreadItem & {
+  mailboxLabels: string[];
+};
+
+export async function syncOutlookMailbox(input: {
+  accountId: string;
+  folders?: string[];
+  mode?: "delta" | "bootstrap";
+}): Promise<
+  JsonResult<{
+    threads: OutlookSyncThread[];
+    removed: OutlookSyncRemoval[];
+    folderSyncAt: Record<string, string>;
+  }>
+> {
+  return apiSend("POST", "/v1/email/sync", input);
+}
+
+export type OutlookFolderStat = {
+  unreadItemCount: number;
+  totalItemCount: number;
+  loaded: true;
+};
+
+export async function fetchOutlookFolderStats(
+  accountId: string
+): Promise<JsonResult<{ folders: Record<string, OutlookFolderStat> }>> {
+  const qs = new URLSearchParams({ accountId }).toString();
+  return apiGet<{ folders: Record<string, OutlookFolderStat> }>(
+    `/v1/email/folders/stats?${qs}`
   );
 }
 

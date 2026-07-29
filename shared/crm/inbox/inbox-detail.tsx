@@ -70,6 +70,7 @@ export function InboxDetailPanel({
   sending,
   sentFlash,
   sendError,
+  hydratingBody = false,
   leads,
   companies,
   suggested,
@@ -100,6 +101,7 @@ export function InboxDetailPanel({
   sending?: boolean;
   sentFlash?: boolean;
   sendError?: string | null;
+  hydratingBody?: boolean;
   leads: CrmLead[];
   companies: CrmCompany[];
   suggested: CrmLead | null;
@@ -133,6 +135,8 @@ export function InboxDetailPanel({
   const bodyParts = parseEmailBody(active.body);
   const attachments = active.attachments ?? [];
   const attachmentsTotal = attachments.reduce((sum, a) => sum + (a.size || 0), 0);
+  const showBodyLoading = active.bodyLoaded === false || hydratingBody;
+  const canReply = outlookConnected && active.bodyLoaded !== false && !hydratingBody;
 
   return (
     <section className="crm-inbox-detail">
@@ -334,7 +338,26 @@ export function InboxDetailPanel({
         )}
 
         <article className="crm-inbox-message-card">
-          {bodyParts.length === 0 ? (
+          {showBodyLoading ? (
+            <div className="flex flex-col gap-3 py-2">
+              {active.preview ? (
+                <p className="crm-inbox-message-paragraph text-textmuted">
+                  {active.preview}
+                </p>
+              ) : null}
+              <div
+                className="flex items-center gap-2 text-sm text-textmuted"
+                role="status"
+                aria-live="polite"
+              >
+                <span
+                  className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"
+                  aria-hidden
+                />
+                Loading full message…
+              </div>
+            </div>
+          ) : bodyParts.length === 0 ? (
             <p className="crm-inbox-message-empty">No message content.</p>
           ) : (
             bodyParts.map((part, i) => (
@@ -446,7 +469,7 @@ export function InboxDetailPanel({
               type="email"
               value={forwardTo}
               onChange={(e) => onForwardToChange(e.target.value)}
-              disabled={!outlookConnected}
+              disabled={!canReply}
               placeholder="Forward to (email address)"
               className="crm-inbox-reply-input"
               aria-label="Forward to"
@@ -455,7 +478,7 @@ export function InboxDetailPanel({
           <textarea
             value={replyText}
             onChange={(e) => onReplyChange(e.target.value)}
-            disabled={!outlookConnected}
+            disabled={!canReply}
             placeholder={
               replyMode === "forward"
                 ? "Add a note (optional)…"
@@ -492,7 +515,7 @@ export function InboxDetailPanel({
                 type="button"
                 className="crm-inbox-btn-reply"
                 disabled={
-                  !outlookConnected ||
+                  !canReply ||
                   sending ||
                   (replyMode === "forward"
                     ? !forwardTo.trim()
