@@ -306,14 +306,18 @@ const Header = () => {
                       id="notification-icon-badge">{total}</span>
                   </span>
                 </button>
-                <div className="main-header-dropdown notification-dropdown !-mt-3 !p-0 hs-dropdown-menu ti-dropdown-menu bg-white dark:bg-bodybg !w-[22rem] border border-defaultborder dark:border-white/10 hidden !m-0"
+                <div className="main-header-dropdown !-mt-3 !p-0 hs-dropdown-menu ti-dropdown-menu bg-white dark:bg-bodybg !w-[23.75rem] min-w-[380px] border border-defaultborder dark:border-white/10 hidden !m-0 overflow-hidden"
                   aria-labelledby="dropdown-notification">
 
-                  <div className="notification-dropdown-header">
-                    <div className="notification-dropdown-header-main">
-                      <p className="notification-dropdown-title">Notifications</p>
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="mb-0 text-[1rem] font-semibold text-defaulttextcolor dark:text-white">
+                        Notifications
+                      </p>
                       {showBadge ? (
-                        <span className="notification-dropdown-count" id="notifiation-data">
+                        <span
+                          className="shrink-0 rounded-sm bg-secondary/10 px-2 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-secondary"
+                          id="notifiation-data">
                           {total} unread
                         </span>
                       ) : null}
@@ -324,41 +328,42 @@ const Header = () => {
                         aria-label="Mark all notifications as read"
                         disabled={loading || markingAllAsRead}
                         onClick={() => void markAllAsRead()}
-                        className="notification-dropdown-mark-all"
+                        className="shrink-0 rounded-md px-2 py-2 text-[0.75rem] font-medium text-textmuted transition-colors hover:text-primary disabled:pointer-events-none disabled:opacity-50 dark:text-white/60 dark:hover:text-white min-h-[2.75rem]"
                       >
                         {markingAllAsRead ? "Clearing…" : "Mark all as read"}
                       </button>
                     ) : null}
                   </div>
                   <div className="dropdown-divider"></div>
-                  <ul className="list-none !m-0 !p-0 end-0" id="header-notification-scroll">
+                  <ul className="list-none !m-0 !p-0 max-h-80 overflow-y-auto" id="header-notification-scroll">
                   {notifications.map((item) => {
                     const colors = iconColorForCategory(item.category);
                     const received = formatNotificationTime(item.createdAt);
                     return (
-                      <li className="notification-dropdown-item" key={item.id}>
-                        <div className="notification-dropdown-item-inner">
+                      <li className="border-b border-defaultborder dark:border-white/10 last:border-b-0" key={item.id}>
+                        <div className="flex items-start gap-3 px-4 py-3">
                           <span
-                            className={`notification-dropdown-icon text-${colors.text} ${colors.bg}`}
+                            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[1.125rem] text-${colors.text} ${colors.bg}`}
                             aria-hidden="true">
                             <i className={`ti ti-${item.icon}`}></i>
                           </span>
-                          <div className="notification-dropdown-content">
-                            <p className="notification-dropdown-item-title">
+                          <div className="min-w-0 flex-1">
+                            <p className="mb-0 text-[0.8125rem] font-semibold leading-snug text-defaulttextcolor dark:text-white">
                               <Link
                                 href={item.href}
                                 scroll={false}
+                                className="text-inherit no-underline hover:text-primary"
                                 onClick={(event) =>
                                   handleNotificationClick(item.id, item.href, event)
                                 }>
                                 {item.title}
                               </Link>
                             </p>
-                            <p className="notification-dropdown-item-body header-notification-text">
+                            <p className="mb-0 mt-0.5 text-[0.75rem] font-normal leading-snug text-textmuted dark:text-white/50 header-notification-text">
                               {item.body}
                             </p>
                             <time
-                              className="notification-dropdown-item-time"
+                              className="mt-1 block text-[0.6875rem] font-normal text-textmuted/80 dark:text-white/40"
                               dateTime={received.iso}
                               title={received.title}>
                               {received.label}
@@ -367,7 +372,7 @@ const Header = () => {
                           <button
                             type="button"
                             aria-label="Dismiss notification"
-                            className="notification-dropdown-dismiss"
+                            className="-me-1 inline-flex shrink-0 items-center justify-center rounded-md text-textmuted transition-colors hover:bg-black/5 hover:text-defaulttextcolor dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white min-h-[2.75rem] min-w-[2.75rem]"
                             onClick={(event) => {
                               event.stopPropagation();
                               void removeNotification(item.id);
@@ -380,23 +385,27 @@ const Header = () => {
                   })}
                   </ul>
 
-                  <div className={`notification-dropdown-footer empty-header-item1 ${notifications.length === 0 ? "hidden" : "block"}`}>
+                  <div className={`border-t border-defaultborder p-4 dark:border-white/10 empty-header-item1 ${notifications.length === 0 ? "hidden" : "block"}`}>
                     {activityTotal > 0 ? (
                       <Link href="/notifications" className="ti-btn ti-btn-primary-full !m-0 w-full p-2">
                         View all
                       </Link>
                     ) : total > 0 ? (
-                      <p className="notification-dropdown-footer-note">
+                      <p className="mb-0 text-center text-[0.75rem] text-textmuted dark:text-white/50">
                         Action items above
                       </p>
                     ) : null}
                   </div>
-                  <div className={`notification-dropdown-empty empty-item1 ${total === 0 ? "block" : "hidden"}`}>
-                    <span className="notification-dropdown-empty-icon" aria-hidden="true">
+                  <div className={`px-6 py-10 text-center empty-item1 ${total === 0 ? "block" : "hidden"}`}>
+                    <span className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-secondary/10 text-[1.5rem] text-secondary" aria-hidden="true">
                       <i className="ti ti-bell-off"></i>
                     </span>
-                    <p className="notification-dropdown-empty-title">No notifications</p>
-                    <p className="notification-dropdown-empty-body">You&apos;re all caught up.</p>
+                    <p className="mb-1 mt-3 text-[0.9375rem] font-semibold text-defaulttextcolor dark:text-white">
+                      No notifications
+                    </p>
+                    <p className="mb-0 text-[0.8125rem] text-textmuted dark:text-white/50">
+                      You&apos;re all caught up.
+                    </p>
                   </div>
                 </div>
               </div>
