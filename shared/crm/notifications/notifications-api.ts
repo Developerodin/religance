@@ -80,6 +80,27 @@ export async function postNotification(
   return apiSend<{ item: NotificationItem }>("POST", "/v1/notifications", body);
 }
 
+export async function postInboundEmailNotification(input: {
+  threadId: string;
+  subject: string;
+  fromEmail: string;
+  messageId?: string;
+  sentAt: string;
+}): Promise<JsonResult<{ item: NotificationItem }>> {
+  return postNotification({
+    type: "inbound_email",
+    dedupeKey: `inbound_email:${input.threadId}`,
+    title: `New email: ${input.subject}`,
+    body: `From ${input.fromEmail}`,
+    href: `/inbox?email=outlook-${input.threadId}`,
+    meta: {
+      threadId: input.threadId,
+      messageId: input.messageId,
+      sentAt: input.sentAt,
+    },
+  });
+}
+
 export async function deleteNotification(
   id: string,
   intent: "dismiss" | "navigate" = "navigate"
