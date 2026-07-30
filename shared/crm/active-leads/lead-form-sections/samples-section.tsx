@@ -9,6 +9,7 @@ import {
   type SampleFormModel,
   type SampleInput,
 } from "@/shared/crm/samples/sample-form";
+import { useCrmSuccessToast } from "@/shared/crm/crm-success-toast";
 import { useCrm } from "@/shared/crm/store/crm-context";
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
@@ -50,6 +51,7 @@ export function SamplesSection({
   const [form, setForm] = useState<SampleFormModel>(newForm);
   // In buffer mode this holds the buffer index (as a string); in store mode the sample id.
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const { show: showToast, toast } = useCrmSuccessToast();
 
   // Pre-fill the product with the lead's medicine once it's known (it may arrive
   // after mount in create mode). Only touches a blank, not-being-edited form.
@@ -68,18 +70,20 @@ export function SamplesSection({
   const handleSubmit = () => {
     if (!form.productId) return;
     const input = buildSampleInput(form, medicines);
+    const isEdit = editingKey != null;
     if (isBuffer) {
-      if (editingKey != null) {
+      if (isEdit) {
         const idx = Number(editingKey);
         setPendingSamples?.((prev) => prev.map((s, i) => (i === idx ? input : s)));
       } else {
         setPendingSamples?.((prev) => [input, ...prev]);
       }
-    } else if (editingKey != null) {
+    } else if (isEdit) {
       updateSample(editingKey, input);
     } else {
       addSample(leadId, input);
     }
+    showToast(isEdit ? "Sample updated." : "Sample recorded.");
     resetForm();
   };
 
@@ -108,6 +112,7 @@ export function SamplesSection({
 
   return (
     <LeadFormSectionShell title="Samples">
+      {toast}
       <LeadFormDataTable
         actionsColumn
         columns={[

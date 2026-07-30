@@ -2,14 +2,17 @@
 
 import {
   buildFollowUpInput,
+  ddmmyyyyToIso,
   emptyFollowUpForm,
   FOLLOW_UP_MODES,
   FOLLOW_UP_OUTCOMES,
   inputToFollowUpForm,
+  isoToDdmmyyyy,
   followUpToForm,
   type FollowUpFormModel,
   type FollowUpInput,
 } from "@/shared/crm/follow-ups/follow-up-form";
+import { useCrmSuccessToast } from "@/shared/crm/crm-success-toast";
 import { useCrm } from "@/shared/crm/store/crm-context";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import {
@@ -39,6 +42,7 @@ export function FollowUpsSection({
   const { followUps, addFollowUp, updateFollowUp, deleteFollowUp } = useCrm();
   const [form, setForm] = useState<FollowUpFormModel>(emptyFollowUpForm());
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const { show: showToast, toast } = useCrmSuccessToast();
 
   const isBuffer = !leadId;
   const resetForm = () => {
@@ -49,8 +53,9 @@ export function FollowUpsSection({
   const handleSubmit = () => {
     if (!form.summary.trim() && !form.mode) return;
     const input = buildFollowUpInput(form);
+    const isEdit = editingKey != null;
     if (isBuffer) {
-      if (editingKey != null) {
+      if (isEdit) {
         const idx = Number(editingKey);
         setPendingFollowUps?.((prev) =>
           prev.map((f, i) => (i === idx ? input : f))
@@ -58,11 +63,12 @@ export function FollowUpsSection({
       } else {
         setPendingFollowUps?.((prev) => [input, ...prev]);
       }
-    } else if (editingKey != null) {
+    } else if (isEdit) {
       updateFollowUp(editingKey, input);
     } else {
       addFollowUp(leadId, input);
     }
+    showToast(isEdit ? "Follow-up updated." : "Follow-up added.");
     resetForm();
   };
 
@@ -91,6 +97,7 @@ export function FollowUpsSection({
 
   return (
     <LeadFormSectionShell title="Follow-ups">
+      {toast}
       <LeadFormDataTable
         actionsColumn
         columns={[
@@ -129,14 +136,16 @@ export function FollowUpsSection({
         <div className="grid grid-cols-12 gap-3">
           <div className="col-span-12 md:col-span-4">
             <label className="form-label text-[0.75rem]" htmlFor="fu-entry-date">
-              Entry date
+              Entry date <span className="text-muted">(blank = today)</span>
             </label>
             <input
               id="fu-entry-date"
+              type="date"
               className="form-control"
-              placeholder="DD-MM-YYYY (blank = today)"
-              value={form.entryDate}
-              onChange={(e) => setForm((f) => ({ ...f, entryDate: e.target.value }))}
+              value={ddmmyyyyToIso(form.entryDate)}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, entryDate: isoToDdmmyyyy(e.target.value) }))
+              }
             />
           </div>
           <div className="col-span-12 md:col-span-4">
@@ -213,11 +222,11 @@ export function FollowUpsSection({
             </label>
             <input
               id="fu-next-date"
+              type="date"
               className="form-control"
-              placeholder="DD-MM-YYYY"
-              value={form.nextFollowUp}
+              value={ddmmyyyyToIso(form.nextFollowUp)}
               onChange={(e) =>
-                setForm((f) => ({ ...f, nextFollowUp: e.target.value }))
+                setForm((f) => ({ ...f, nextFollowUp: isoToDdmmyyyy(e.target.value) }))
               }
             />
           </div>

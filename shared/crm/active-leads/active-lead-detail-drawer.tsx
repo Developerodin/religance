@@ -339,7 +339,22 @@ export function ActiveLeadDetailDrawer({
 
           {activeTab === "emails" && (
             <div className="py-4 space-y-3" role="tabpanel">
-              {emails.length === 0 ? (
+              {!lead.contactEmail ? (
+                <div className="text-center py-6">
+                  <p className="text-[0.875rem] text-textmuted mb-2">
+                    No email added for this contact.
+                  </p>
+                  <Link
+                    href={leadEditHref(lead.id, {
+                      from: "active-leads",
+                      focus: "contact-email",
+                    })}
+                    className="ti-btn ti-btn-primary active-leads-drawer-btn"
+                  >
+                    Add email
+                  </Link>
+                </div>
+              ) : emails.length === 0 ? (
                 <div className="text-center py-6">
                   <p className="text-[0.875rem] text-textmuted mb-2">
                     No emails yet. Send outreach to start the thread.

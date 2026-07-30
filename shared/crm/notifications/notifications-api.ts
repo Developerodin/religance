@@ -7,6 +7,7 @@ export type NotificationCategory = "action" | "activity";
 export type NotificationType =
   | "verification_pending"
   | "follow_up_due"
+  | "follow_up_logged"
   | "inbound_email"
   | "outlook_error"
   | "lead_verified"

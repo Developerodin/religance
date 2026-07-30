@@ -108,7 +108,7 @@ export default function Verify() {
                     <p className="verify-page__alert-body">
                       Your account is active. You can sign in now.
                     </p>
-                    <Link href="/" className="ti-btn ti-btn-primary !bg-primary !text-white !font-medium mt-3">
+                    <Link href="/" className="ti-btn ti-btn-primary !bg-primary !text-bodybg !font-medium mt-3">
                       Continue to sign in
                     </Link>
                   </div>
@@ -146,7 +146,7 @@ export default function Verify() {
                         type="button"
                         onClick={handleResend}
                         disabled={resendBusy}
-                        className="ti-btn ti-btn-primary !bg-primary !text-white !font-medium w-full disabled:opacity-60"
+                        className="ti-btn ti-btn-primary !bg-primary !text-bodybg !font-medium w-full disabled:opacity-60"
                       >
                         {resendBusy ? "Sending…" : "Send new verification link"}
                       </button>

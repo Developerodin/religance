@@ -21,7 +21,7 @@ export default function BrandLogo({ sidebar, auth }: BrandLogoProps) {
   return (
     <span className={rootClass}>
       <img src={religenceIcon} alt="" className="religence-brand__icon" />
-      <span className="religence-brand__text">religence</span>
+      <span className="religence-brand__text">Religence</span>
     </span>
   );
 }

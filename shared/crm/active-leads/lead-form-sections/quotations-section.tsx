@@ -10,6 +10,7 @@ import {
   type QuotationFormModel,
   type QuotationInput,
 } from "@/shared/crm/quotations/quotation-form";
+import { useCrmSuccessToast } from "@/shared/crm/crm-success-toast";
 import { useCrm } from "@/shared/crm/store/crm-context";
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
@@ -56,6 +57,7 @@ export function QuotationsSection({
   });
   const [form, setForm] = useState<QuotationFormModel>(newForm);
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const { show: showToast, toast } = useCrmSuccessToast();
 
   useEffect(() => {
     if (defaultProductId && editingKey == null) {
@@ -72,8 +74,9 @@ export function QuotationsSection({
   const handleSubmit = () => {
     if (!form.productId) return;
     const input = buildQuotationInput(form, medicines);
+    const isEdit = editingKey != null;
     if (isBuffer) {
-      if (editingKey != null) {
+      if (isEdit) {
         const idx = Number(editingKey);
         setPendingQuotations?.((prev) =>
           prev.map((q, i) => (i === idx ? input : q))
@@ -81,11 +84,12 @@ export function QuotationsSection({
       } else {
         setPendingQuotations?.((prev) => [input, ...prev]);
       }
-    } else if (editingKey != null) {
+    } else if (isEdit) {
       updateQuotation(editingKey, input);
     } else {
       addQuotation(leadId, input);
     }
+    showToast(isEdit ? "Quotation updated." : "Quotation created.");
     resetForm();
   };
 
@@ -115,6 +119,7 @@ export function QuotationsSection({
 
   return (
     <LeadFormSectionShell title="Quotations">
+      {toast}
       <LeadFormDataTable
         actionsColumn
         columns={[

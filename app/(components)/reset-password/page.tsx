@@ -72,7 +72,7 @@ export default function ResetPassword() {
                         <label htmlFor="rp-password" className="form-label text-default block">
                           New Password
                         </label>
-                        <div className="input-group">
+                        <div className="relative">
                           <input
                             name="password"
                             type={show ? "text" : "password"}
@@ -81,14 +81,14 @@ export default function ResetPassword() {
                               setPassword(e.target.value);
                               setError("");
                             }}
-                            className="form-control !border-s form-control-lg !rounded-s-md"
+                            className="form-control form-control-lg !rounded-md !pe-11"
                             id="rp-password"
                             placeholder="new password"
                           />
                           <button
                             onClick={() => setShow(!show)}
                             aria-label="Toggle password visibility"
-                            className="ti-btn ti-btn-light !rounded-s-none !mb-0"
+                            className="absolute inset-y-0 end-0 flex items-center justify-center !h-11 !w-11 text-defaulttextcolor/60 hover:text-defaulttextcolor rounded-md transition-colors duration-150 active:scale-95 focus-visible:outline-none focus-visible:!ring-2 focus-visible:!ring-primary/25 focus-visible:!ring-offset-1 dark:focus-visible:!ring-offset-bodybg"
                             type="button"
                           >
                             <i className={`${show ? "ri-eye-line" : "ri-eye-off-line"} align-middle`}></i>
@@ -102,7 +102,7 @@ export default function ResetPassword() {
                         <button
                           onClick={handleReset}
                           disabled={busy}
-                          className="ti-btn ti-btn-primary !bg-primary !text-white !font-medium disabled:opacity-60"
+                          className="ti-btn ti-btn-primary !bg-primary !text-bodybg !font-medium disabled:opacity-60"
                         >
                           {busy ? "Updating…" : "Update Password"}
                         </button>

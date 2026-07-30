@@ -7,6 +7,7 @@ export type LeadEditPrefill = {
   from?: LeadFormSource;
   saltId?: string | null;
   medicineId?: string | null;
+  focus?: string;
 };
 
 /** Static-export-safe edit URL — lead IDs are runtime-generated, not path segments. */
@@ -19,6 +20,7 @@ export function leadEditHref(
   if (prefill.from) params.set("from", prefill.from);
   if (prefill.saltId) params.set("saltId", prefill.saltId);
   if (prefill.medicineId) params.set("medicineId", prefill.medicineId);
+  if (prefill.focus) params.set("focus", prefill.focus);
   return `/active-leads/edit/?${params.toString()}`;
 }
 

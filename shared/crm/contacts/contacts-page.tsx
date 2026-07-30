@@ -368,14 +368,14 @@ export default function ContactsPage() {
                               className="saved-contacts-row-actions"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <a
-                                href={`mailto:${contact.email}`}
+                              <Link
+                                href="/inbox"
                                 className="saved-contacts-icon-btn"
                                 title="Email"
                                 aria-label={`Email ${contact.name}`}
                               >
                                 <i className="ri-mail-line"></i>
-                              </a>
+                              </Link>
                               <button
                                 type="button"
                                 className="saved-contacts-icon-btn"

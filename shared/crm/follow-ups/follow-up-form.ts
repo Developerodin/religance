@@ -89,3 +89,15 @@ export function inputToFollowUpForm(input: FollowUpInput): FollowUpFormModel {
 export function formatFollowUpContactedBy(): string {
   return getUserDisplayName() || "—";
 }
+
+/** Converts a DD-MM-YYYY display date to the YYYY-MM-DD an <input type="date"> needs. */
+export function ddmmyyyyToIso(value: string): string {
+  const m = value.trim().match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
+}
+
+/** Converts the YYYY-MM-DD from an <input type="date"> back to our DD-MM-YYYY display format. */
+export function isoToDdmmyyyy(value: string): string {
+  const m = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
+}

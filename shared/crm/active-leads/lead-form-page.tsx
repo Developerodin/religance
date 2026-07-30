@@ -300,6 +300,14 @@ export default function LeadFormPage({ mode }: LeadFormPageProps) {
   }, [mode, lead, getCompany, getContact, hydratedForm]);
 
   useEffect(() => {
+    if (!hydratedForm) return;
+    const focusField = searchParams.get("focus");
+    if (!focusField) return;
+    scrollToField(focusField);
+    document.getElementById(focusField)?.focus();
+  }, [hydratedForm, searchParams]);
+
+  useEffect(() => {
     if (titleTouched || !companyName.trim() || !selectedMedicine) return;
     const autoTitle = `${selectedMedicine.name} — ${companyName.trim()}`;
     setTitle(autoTitle);

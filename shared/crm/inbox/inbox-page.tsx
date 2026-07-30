@@ -17,6 +17,7 @@ import {
 import { INBOX_FOLDERS, INBOX_FOLDER_LABEL_IDS, type InboxFolderName } from "./inbox-constants";
 import { InboxListPanel } from "./inbox-list";
 import { InboxSidebar } from "./inbox-sidebar";
+import { InboxSyncIndicator } from "./inbox-sync-indicator";
 import {
   getInboxTag,
   resolvePeerEmail,
@@ -359,31 +360,34 @@ export default function InboxPage() {
   // 8-folder fans throttled Graph, so the login sync often landed empty and the
   // user had to hit refresh. One trigger = one clean sync.
 
+  const oauthHandledRef = useRef(false);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const connected = params.get("outlook_connected");
     const authErrorParam = params.get("outlook_error");
     if (!connected && !authErrorParam) return;
+    // StrictMode double-invokes this effect on mount in dev; a plain closure
+    // flag gets killed by the spurious cleanup before the real sync resolves,
+    // leaving checkingConnection stuck true forever. A ref survives the
+    // remount, so the one-time OAuth handling only ever really runs once.
+    if (oauthHandledRef.current) return;
+    oauthHandledRef.current = true;
 
     setCheckingConnection(true);
-    let active = true;
     const applyOAuthResult = async () => {
       try {
         await syncOutlookInbox(null, connected);
       } catch (err) {
-        if (active) {
-          setAuthError(
-            err instanceof Error
-              ? err.message
-              : "Could not finish Outlook connection sync."
-          );
-        }
+        setAuthError(
+          err instanceof Error
+            ? err.message
+            : "Could not finish Outlook connection sync."
+        );
       } finally {
-        if (active) {
-          setCheckingConnection(false);
-          setConnectingOutlook(false);
-        }
+        setCheckingConnection(false);
+        setConnectingOutlook(false);
       }
     };
     void applyOAuthResult();
@@ -405,9 +409,6 @@ export default function InboxPage() {
       "",
       `${window.location.pathname}${qs ? `?${qs}` : ""}`
     );
-    return () => {
-      active = false;
-    };
   }, [syncOutlookInbox]);
 
   const active = filtered.find((e) => e.id === selectedId) ?? null;
@@ -753,7 +754,7 @@ export default function InboxPage() {
             <div className="box-body py-5 px-3 px-md-4">
               <div className="mx-auto w-full max-w-2xl text-center">
                 <span className="avatar avatar-lg bg-primary/10 text-primary mb-3">
-                  <i className="ri-loader-4-line text-[1.25rem] animate-spin"></i>
+                  <InboxSyncIndicator active size="lg" />
                 </span>
                 <h5 className="mb-2">Checking Outlook connection</h5>
                 <p className="text-textmuted mb-0">

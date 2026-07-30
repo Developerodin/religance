@@ -4,7 +4,7 @@ import { createTimeline, stagger } from "animejs";
 import { useEffect, useId, useRef } from "react";
 
 /** Salt-lattice sync mark — purple crystals + slow orbit, tuned for frequent 30s polls. */
-const SIZES = { sm: 14, md: 18 } as const;
+const SIZES = { sm: 14, md: 18, lg: 28 } as const;
 
 const CRYSTAL_SITES = [
   { cx: 9, cy: 4.6 },
