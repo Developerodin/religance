@@ -38,3 +38,9 @@ NUL.map
 .impeccable/
 coverage/
 .turbo/
+
+# internal scripts / tests
+scripts/
+**/*.test.*
+**/*.spec.*
+__tests__/
