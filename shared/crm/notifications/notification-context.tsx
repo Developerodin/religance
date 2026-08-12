@@ -16,6 +16,7 @@ import {
   getNotifications,
   type NotificationItem,
 } from "./notifications-api";
+import { dismissAllPaged } from "./dismiss-all";
 
 const NOTIFICATION_POLL_INTERVAL_MS = 60_000;
 const BELL_DROPDOWN_LIMIT = 20;
@@ -128,22 +129,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const markAllAsRead = useCallback(async () => {
     if (markingAllAsRead || total === 0) return;
     setMarkingAllAsRead(true);
-    const snapshot = [...items];
     try {
-      for (const item of snapshot) {
-        const res = await deleteNotification(item.id, "dismiss");
-        if (!res.live) {
-          void refresh();
-          return;
-        }
+      const ok = await dismissAllPaged(
+        () => getNotifications({ limit: BELL_DROPDOWN_LIMIT }),
+        (id) => deleteNotification(id, "dismiss")
+      );
+      if (!ok) {
+        void refresh();
+        return;
       }
       setItems([]);
       setTotal(0);
       setActivityTotal(0);
+      setError(null);
     } finally {
       setMarkingAllAsRead(false);
     }
-  }, [items, total, markingAllAsRead, refresh]);
+  }, [total, markingAllAsRead, refresh]);
 
   const value = useMemo<NotificationContextValue>(
     () => ({

@@ -41,17 +41,10 @@ const Header = () => {
 
   const iconColorForCategory = (category: "action" | "activity") =>
     category === "action"
-      ? { bg: "!bg-primary/10", text: "primary" }
-      : { bg: "!bg-secondary/10", text: "secondary" };
+      ? { bg: "!bg-primary/10", text: "text-primary" }
+      : { bg: "!bg-secondary/10", text: "text-secondary" };
 
-  const handleNotificationClick = (
-    id: string,
-    href: string,
-    event: React.MouseEvent<HTMLAnchorElement, MouseEvent>
-  ) => {
-    event.preventDefault();
-    void removeNotification(id, { navigate: href });
-  };
+  const showEmpty = !loading && !error && total === 0;
 
   //full screen
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -291,23 +284,35 @@ const Header = () => {
                   <i className={`bx ${isDark ? "bx-sun" : "bx-moon"} header-link-icon`}></i>
                 </button>
               </div>
-              <div className="header-element py-[1rem] md:px-[0.65rem] px-2 notifications-dropdown header-notification hs-dropdown ti-dropdown !hidden md:!block [--placement:bottom-right]">
-                <button id="dropdown-notification" type="button"
-                  className="hs-dropdown-toggle relative ti-dropdown-toggle !p-0 !border-0 flex-shrink-0  !rounded-full !shadow-none align-middle text-xs">
-                  <i className="bx bx-bell header-link-icon  text-[1.125rem]"></i>
-                  <span className="flex absolute h-5 w-5 -top-[0.25rem] end-0  -me-[0.6rem]">
+              <div className="header-element py-[1rem] md:px-[0.65rem] px-2 notifications-dropdown header-notification hs-dropdown ti-dropdown [--placement:bottom-right]">
+                <button
+                  id="dropdown-notification"
+                  type="button"
+                  aria-label="Notifications"
+                  aria-haspopup="menu"
+                  aria-expanded="false"
+                  className="hs-dropdown-toggle relative ti-dropdown-toggle !p-0 !border-0 flex-shrink-0 !rounded-full !shadow-none align-middle text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                >
+                  <i className="bx bx-bell header-link-icon text-[1.125rem]" aria-hidden="true"></i>
+                  <span className="flex absolute h-5 w-5 -top-[0.25rem] end-0 -me-[0.6rem]">
                     {showBadge ? (
                       <span
-                        className="animate-slow-ping absolute inline-flex -top-[2px] -start-[2px] h-full w-full rounded-full bg-secondary/40 opacity-75"></span>
+                        className="animate-slow-ping absolute inline-flex -top-[2px] -start-[2px] h-full w-full rounded-full bg-secondary/40 opacity-75"
+                      ></span>
                     ) : null}
                     <span
                       className={`relative inline-flex justify-center items-center rounded-full h-[14.7px] w-[14px] bg-secondary text-[0.625rem] text-white ${showBadge ? "" : "hidden"}`}
-                      id="notification-icon-badge">{total}</span>
+                      id="notification-icon-badge"
+                    >
+                      {total}
+                    </span>
                   </span>
                 </button>
-                <div className="main-header-dropdown !-mt-3 !p-0 hs-dropdown-menu ti-dropdown-menu bg-white dark:bg-bodybg !w-[23.75rem] min-w-[380px] border border-defaultborder dark:border-white/10 hidden !m-0 overflow-hidden"
-                  aria-labelledby="dropdown-notification">
-
+                <div
+                  className="main-header-dropdown !-mt-3 !p-0 hs-dropdown-menu ti-dropdown-menu bg-white dark:bg-bodybg !w-[min(23.75rem,calc(100vw-1rem))] min-w-0 border border-defaultborder dark:border-white/10 hidden !m-0 overflow-hidden"
+                  aria-labelledby="dropdown-notification"
+                  role="menu"
+                >
                   <div className="flex items-center justify-between gap-3 px-4 py-3">
                     <div className="flex min-w-0 items-center gap-2">
                       <p className="mb-0 text-[1rem] font-semibold text-defaulttextcolor dark:text-white">
@@ -316,90 +321,118 @@ const Header = () => {
                       {showBadge ? (
                         <span
                           className="shrink-0 rounded-sm bg-secondary/10 px-2 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-secondary"
-                          id="notifiation-data">
+                          id="notifiation-data"
+                        >
                           {total} unread
                         </span>
                       ) : null}
                     </div>
-                    {total > 0 ? (
+                    {showBadge ? (
                       <button
                         type="button"
                         aria-label="Mark all notifications as read"
                         disabled={loading || markingAllAsRead}
                         onClick={() => void markAllAsRead()}
-                        className="shrink-0 rounded-md px-2 py-2 text-[0.75rem] font-medium text-textmuted transition-colors hover:text-primary disabled:pointer-events-none disabled:opacity-50 dark:text-white/60 dark:hover:text-white min-h-[2.75rem]"
+                        className="shrink-0 rounded-md px-2 py-2 text-[0.75rem] font-medium text-textmuted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:pointer-events-none disabled:opacity-50 dark:text-white/60 dark:hover:text-white min-h-[2.75rem]"
                       >
                         {markingAllAsRead ? "Clearing…" : "Mark all as read"}
                       </button>
                     ) : null}
                   </div>
                   <div className="dropdown-divider"></div>
-                  <ul className="list-none !m-0 !p-0 max-h-80 overflow-y-auto" id="header-notification-scroll">
-                  {notifications.map((item) => {
-                    const colors = iconColorForCategory(item.category);
-                    const received = formatNotificationTime(item.createdAt);
-                    return (
-                      <li className="border-b border-defaultborder dark:border-white/10 last:border-b-0" key={item.id}>
-                        <div className="flex items-start gap-3 px-4 py-3">
-                          <span
-                            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[1.125rem] text-${colors.text} ${colors.bg}`}
-                            aria-hidden="true">
-                            <i className={`ti ti-${item.icon}`}></i>
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="mb-0 text-[0.8125rem] font-semibold leading-snug text-defaulttextcolor dark:text-white">
-                              <Link
-                                href={item.href}
-                                scroll={false}
-                                className="text-inherit no-underline hover:text-primary"
-                                onClick={(event) =>
-                                  handleNotificationClick(item.id, item.href, event)
-                                }>
-                                {item.title}
-                              </Link>
-                            </p>
-                            <p className="mb-0 mt-0.5 text-[0.75rem] font-normal leading-snug text-textmuted dark:text-white/50 header-notification-text">
-                              {item.body}
-                            </p>
-                            <time
-                              className="mt-1 block text-[0.6875rem] font-normal text-textmuted/80 dark:text-white/40"
-                              dateTime={received.iso}
-                              title={received.title}>
-                              {received.label}
-                            </time>
-                          </div>
-                          <button
-                            type="button"
-                            aria-label="Dismiss notification"
-                            className="-me-1 inline-flex shrink-0 items-center justify-center rounded-md text-textmuted transition-colors hover:bg-black/5 hover:text-defaulttextcolor dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white min-h-[2.75rem] min-w-[2.75rem]"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void removeNotification(item.id);
-                            }}>
-                            <i className="ti ti-x" aria-hidden="true"></i>
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                  </ul>
-
-                  <div className={`border-t border-defaultborder p-4 dark:border-white/10 empty-header-item1 ${notifications.length === 0 ? "hidden" : "block"}`}>
-                    <Link href="/notifications/" className="ti-btn ti-btn-primary-full !m-0 w-full p-2">
-                      View all
-                    </Link>
-                  </div>
-                  <div className={`px-6 py-10 text-center empty-item1 ${total === 0 ? "block" : "hidden"}`}>
-                    <span className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-secondary/10 text-[1.5rem] text-secondary" aria-hidden="true">
-                      <i className="ti ti-bell-off"></i>
-                    </span>
-                    <p className="mb-1 mt-3 text-[0.9375rem] font-semibold text-defaulttextcolor dark:text-white">
-                      No notifications
+                  {loading ? (
+                    <p className="mb-0 px-4 py-8 text-center text-[0.8125rem] text-textmuted" role="status">
+                      Loading notifications…
                     </p>
-                    <p className="mb-0 text-[0.8125rem] text-textmuted dark:text-white/50">
-                      You&apos;re all caught up.
+                  ) : error ? (
+                    <p className="mb-0 px-4 py-8 text-center text-[0.8125rem] text-danger" role="alert">
+                      {error}
                     </p>
-                  </div>
+                  ) : showEmpty ? (
+                    <div className="px-6 py-10 text-center empty-item1">
+                      <span
+                        className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-secondary/10 text-[1.5rem] text-secondary"
+                        aria-hidden="true"
+                      >
+                        <i className="ti ti-bell-off"></i>
+                      </span>
+                      <p className="mb-1 mt-3 text-[0.9375rem] font-semibold text-defaulttextcolor dark:text-white">
+                        No notifications
+                      </p>
+                      <p className="mb-0 text-[0.8125rem] text-textmuted dark:text-white/50">
+                        You&apos;re all caught up.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <ul
+                        className="list-none !m-0 !p-0 max-h-80 overflow-y-auto"
+                        id="header-notification-scroll"
+                      >
+                        {notifications.map((item) => {
+                          const colors = iconColorForCategory(item.category);
+                          const received = formatNotificationTime(item.createdAt);
+                          return (
+                            <li
+                              className="border-b border-defaultborder dark:border-white/10 last:border-b-0"
+                              key={item.id}
+                            >
+                              <div className="flex items-start gap-3 px-4 py-3">
+                                <span
+                                  className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[1.125rem] ${colors.bg} ${colors.text}`}
+                                  aria-hidden="true"
+                                >
+                                  <i className={`ti ti-${item.icon}`}></i>
+                                </span>
+                                <button
+                                  type="button"
+                                  className="min-w-0 flex-1 rounded-md text-start transition-colors hover:bg-black/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 dark:hover:bg-white/[0.04]"
+                                  onClick={() =>
+                                    void removeNotification(item.id, {
+                                      navigate: item.href,
+                                    })
+                                  }
+                                >
+                                  <p className="mb-0 text-[0.8125rem] font-semibold leading-snug text-defaulttextcolor dark:text-white">
+                                    {item.title}
+                                  </p>
+                                  <p className="mb-0 mt-0.5 text-[0.75rem] font-normal leading-snug text-textmuted dark:text-white/50 header-notification-text">
+                                    {item.body}
+                                  </p>
+                                  <time
+                                    className="mt-1 block text-[0.6875rem] font-normal text-textmuted/80 dark:text-white/40"
+                                    dateTime={received.iso}
+                                    title={received.title}
+                                  >
+                                    {received.label}
+                                  </time>
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={`Dismiss ${item.title}`}
+                                  className="-me-1 inline-flex shrink-0 items-center justify-center rounded-md text-textmuted transition-colors hover:bg-black/5 hover:text-defaulttextcolor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white min-h-[2.75rem] min-w-[2.75rem]"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void removeNotification(item.id);
+                                  }}
+                                >
+                                  <i className="ti ti-x" aria-hidden="true"></i>
+                                </button>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      <div className="border-t border-defaultborder p-4 dark:border-white/10 empty-header-item1">
+                        <Link
+                          href="/notifications/"
+                          className="ti-btn ti-btn-primary-full !m-0 w-full p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                        >
+                          View all
+                        </Link>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="header-element header-fullscreen py-[1rem] md:px-[0.65rem] px-2">

@@ -103,7 +103,7 @@ export default function NotificationsPage() {
           ) : null}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
-          <nav className="flex gap-1" aria-label="Notification categories">
+          <nav className="flex gap-1" role="tablist" aria-label="Notification categories">
             {TABS.map((t) => {
               const count =
                 t.id === "all"
@@ -115,8 +115,10 @@ export default function NotificationsPage() {
                 <button
                   key={t.id}
                   type="button"
+                  role="tab"
+                  aria-selected={tab === t.id}
                   onClick={() => setTab(t.id)}
-                  className={`px-3 py-1.5 text-[0.75rem] font-medium rounded-md whitespace-nowrap ${
+                  className={`px-3 py-1.5 text-[0.75rem] font-medium rounded-md whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
                     tab === t.id
                       ? "bg-primary/10 text-primary"
                       : "text-textmuted hover:text-primary"
@@ -193,7 +195,7 @@ export default function NotificationsPage() {
                     <button
                       type="button"
                       aria-label={`Dismiss ${item.title}`}
-                      className="inline-flex shrink-0 items-center justify-center rounded-md text-textmuted transition-colors hover:bg-black/5 hover:text-defaulttextcolor dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white min-h-[2.75rem] min-w-[2.75rem]"
+                      className="inline-flex shrink-0 items-center justify-center rounded-md text-textmuted transition-colors hover:bg-black/5 hover:text-defaulttextcolor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 dark:text-white/50 dark:hover:bg-white/10 dark:hover:text-white min-h-[2.75rem] min-w-[2.75rem]"
                       onClick={() => void onDismiss(item.id)}
                     >
                       <i className="ti ti-x" aria-hidden="true" />
