@@ -3273,12 +3273,17 @@ body:has(.lead-form-page) {
     }
   }
 
-  /* Mobile contact cards — no horizontal table scroll below md. */
+  /* Phone + tablet cards — table's columns as a vertical hierarchy.
+     Breakpoint lives here: nested SCSS outranks a `xl:hidden` utility. */
   .saved-contacts-cards {
-    display: flex;
+    display: none;
     flex-direction: column;
     gap: 0.65rem;
     padding: 0.75rem;
+
+    @media (max-width: 1199.98px) {
+      display: flex;
+    }
   }
 
   .saved-contacts-card {
