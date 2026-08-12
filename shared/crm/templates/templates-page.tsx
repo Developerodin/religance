@@ -43,6 +43,8 @@ const SAMPLE_VARS: TemplateVariables = {
 type EditorTab = "edit" | "preview";
 type InsertTarget = "subject" | "body";
 type SyncPhase = "idle" | "loading" | "saving";
+// ponytail: local state for mobile drill-down; URL sync if deep-link needed
+type MobilePane = "library" | "editor";
 const SYNC_STUCK_TIMEOUT_MS = 15000;
 
 function templateEquals(a: EmailTemplate, b: EmailTemplate): boolean {
@@ -87,12 +89,12 @@ function MergeFieldChips({
   onInsert: (token: string) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2 max-w-full overflow-x-auto">
       {TEMPLATE_VARIABLES.map((v) => (
         <button
           key={v.key}
           type="button"
-          className="badge bg-primary/10 text-primary border-0 cursor-pointer hover:bg-primary/20 whitespace-nowrap"
+          className="badge bg-primary/10 text-primary border-0 cursor-pointer hover:bg-primary/20 whitespace-nowrap shrink-0"
           onClick={() => onInsert(`{{${v.key}}}`)}
         >
           {v.label}
@@ -120,6 +122,7 @@ export default function TemplatesPage() {
   const [insertTarget, setInsertTarget] = useState<InsertTarget>("body");
   const [syncPhase, setSyncPhase] = useState<SyncPhase>("idle");
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [mobilePane, setMobilePane] = useState<MobilePane>("library");
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const remoteLoadedRef = useRef(false);
@@ -280,6 +283,7 @@ export default function TemplatesPage() {
       onSuccess: (saved) => {
         setSelectedId(saved.find((t) => t.id === id)?.id ?? saved[0]?.id ?? id);
         setTab("edit");
+        setMobilePane("editor");
       },
     });
   };
@@ -291,6 +295,7 @@ export default function TemplatesPage() {
     void persistTemplates(nextTemplates, {
       onSuccess: (saved) => {
         setSelectedId(saved[0]?.id ?? "");
+        setMobilePane("library");
       },
     });
   };
@@ -301,13 +306,14 @@ export default function TemplatesPage() {
       onSuccess: (saved) => {
         setSelectedId(saved[0]?.id ?? "");
         setTab("edit");
+        setMobilePane("library");
       },
     });
   };
 
   const selectTemplate = (id: string) => {
-    if (id === selectedId) return;
-    setSelectedId(id);
+    if (id !== selectedId) setSelectedId(id);
+    setMobilePane("editor");
   };
 
   if (!hydrated || !draft) {
@@ -333,22 +339,62 @@ export default function TemplatesPage() {
     </button>
   );
 
+  const editorActions = (
+    <>
+      {isBuiltIn ? (
+        <button
+          type="button"
+          className="ti-btn ti-btn-light !py-1.5 !px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0 !min-h-[2.75rem] md:!min-h-0"
+          onClick={handleReset}
+          disabled={isSyncing}
+          aria-label="Reset selected built-in template"
+        >
+          Reset
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="ti-btn ti-btn-danger !py-1.5 !px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0 !min-h-[2.75rem] md:!min-h-0"
+          onClick={handleDelete}
+          disabled={isSyncing}
+          aria-label="Delete selected custom template"
+        >
+          Delete
+        </button>
+      )}
+      <button
+        type="button"
+        className="ti-btn ti-btn-primary !py-1.5 !px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0 !min-h-[2.75rem] md:!min-h-0 flex-1 md:flex-none"
+        onClick={handleSave}
+        disabled={!isDirty || isSyncing}
+        aria-label="Save template changes"
+      >
+        Save changes
+      </button>
+    </>
+  );
+
   return (
     <Fragment>
       <Seo title="Email Templates" />
 
       <div
-        className="box custom-box !mb-0 flex flex-col min-h-[calc(100vh-12rem)]"
+        className="box custom-box !mb-0 flex flex-col max-md:min-h-0 md:min-h-[calc(100vh-10rem)] xl:min-h-[calc(100vh-12rem)]"
         aria-busy={isSyncing}
       >
-        <div className="box-header !flex-wrap gap-x-4 gap-y-3 !items-start">
-          <div className="min-w-0 flex-1 basis-full lg:basis-auto">
+        {/* Page header — library pane on mobile; always on md+ */}
+        <div
+          className={`box-header !flex-wrap gap-x-3 gap-y-2 !items-start md:!items-center xl:gap-x-4 xl:gap-y-3 ${
+            mobilePane === "editor" ? "max-md:hidden" : ""
+          }`}
+        >
+          <div className="min-w-0 flex-1 basis-full xl:basis-auto">
             <h5 className="box-title mb-0 before:!hidden">Email Templates</h5>
-            <p className="text-[0.75rem] text-textmuted mb-0 mt-1">
+            <p className="text-[0.75rem] text-textmuted mb-0 mt-1 hidden xl:block">
               Edit outreach templates used from Active Leads and Inbox.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 ms-auto">
+          <div className="flex flex-wrap items-center gap-1.5 xl:gap-2 ms-auto w-full xl:w-auto">
             <span className="badge bg-light text-defaulttextcolor whitespace-nowrap">
               {emailTemplates.length} templates
             </span>
@@ -358,12 +404,18 @@ export default function TemplatesPage() {
               </span>
             )}
             {syncPhase === "loading" && (
-              <span className="badge bg-info/10 text-info whitespace-nowrap" aria-live="polite">
+              <span
+                className="badge bg-info/10 text-info whitespace-nowrap"
+                aria-live="polite"
+              >
                 Syncing...
               </span>
             )}
             {syncPhase === "saving" && (
-              <span className="badge bg-info/10 text-info whitespace-nowrap" aria-live="polite">
+              <span
+                className="badge bg-info/10 text-info whitespace-nowrap"
+                aria-live="polite"
+              >
                 Syncing...
               </span>
             )}
@@ -374,49 +426,57 @@ export default function TemplatesPage() {
             )}
             <button
               type="button"
-              className="ti-btn ti-btn-light !py-1.5 !px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0"
+              className="ti-btn ti-btn-light !py-1.5 !px-2.5 xl:!px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0 !min-h-[2.75rem] md:!min-h-0"
               onClick={handleResetAll}
               disabled={isSyncing}
               aria-label="Reset all templates"
+              title="Reset all"
             >
-              Reset all
+              <i className="ri-refresh-line me-1 md:max-xl:me-0" aria-hidden="true" />
+              <span className="md:max-xl:hidden">Reset all</span>
             </button>
             <Link
               href="/active-leads"
-              className="ti-btn ti-btn-primary !py-1.5 !px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0"
+              className="ti-btn ti-btn-primary !py-1.5 !px-2.5 xl:!px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0 !min-h-[2.75rem] md:!min-h-0 inline-flex items-center"
+              aria-label="Send from pipeline"
+              title="Send from pipeline"
             >
-              <i className="ri-mail-send-line me-1"></i>
-              Send from pipeline
+              <i className="ri-mail-send-line me-1 md:max-xl:me-0" aria-hidden="true" />
+              <span className="md:max-xl:hidden">Send from pipeline</span>
             </Link>
           </div>
         </div>
 
-        <div className="box-body !p-0 flex-1 flex flex-col min-h-0">
+        <div className="box-body !p-0 flex-1 flex flex-col min-h-0 min-w-0">
           {syncError ? (
             <div className="alert alert-danger rounded-none mb-0" role="alert">
               Could not sync templates with backend Mongo: {syncError}. Showing
               cached local data until sync succeeds.
             </div>
           ) : null}
-          <div className="grid grid-cols-12 flex-1 min-h-0 items-stretch">
-            {/* Library */}
-            <div className="lg:col-span-4 col-span-12 border-b lg:border-b-0 lg:border-e border-defaultborder dark:border-defaultborder/10 flex flex-col min-h-0">
-              <div className="px-4 py-3 border-b border-defaultborder dark:border-defaultborder/10 shrink-0 flex items-center justify-between gap-3">
+          <div className="grid grid-cols-12 flex-1 min-h-0 min-w-0 items-stretch">
+            {/* Library — full width on mobile (library pane); ~33% from md */}
+            <div
+              className={`col-span-12 md:col-span-4 xl:col-span-4 border-b md:border-b-0 md:border-e border-defaultborder dark:border-defaultborder/10 flex-col min-h-0 min-w-0 ${
+                mobilePane === "library" ? "flex" : "hidden md:flex"
+              }`}
+            >
+              <div className="px-3 py-2.5 xl:px-4 xl:py-3 border-b border-defaultborder dark:border-defaultborder/10 shrink-0 flex items-center justify-between gap-2 xl:gap-3">
                 <h6 className="font-semibold text-[0.875rem] mb-0">
                   Template library
                 </h6>
                 <button
                   type="button"
-                  className="ti-btn ti-btn-primary !py-1.5 !px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0"
+                  className="ti-btn ti-btn-primary !py-1.5 !px-2.5 xl:!px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0 !min-h-[2.75rem] md:!min-h-0"
                   onClick={handleAdd}
                   disabled={isSyncing}
                   aria-label="Create new template"
                 >
-                  <i className="ri-add-line me-1"></i>
+                  <i className="ri-add-line me-1" aria-hidden="true" />
                   New template
                 </button>
               </div>
-              <ul className="list-none mb-0 flex-1 overflow-y-auto">
+              <ul className="list-none mb-0 flex-1 md:overflow-y-auto max-md:overflow-visible">
                 {emailTemplates.map((t) => {
                   const selected = selectedId === t.id;
                   return (
@@ -425,13 +485,13 @@ export default function TemplatesPage() {
                         type="button"
                         onClick={() => selectTemplate(t.id)}
                         aria-pressed={selected}
-                        className={`w-full text-start px-4 py-3 border-b border-defaultborder dark:border-defaultborder/10 last:border-b-0 transition-colors ${
+                        className={`w-full text-start px-3 py-2.5 xl:px-4 xl:py-3 border-b border-defaultborder dark:border-defaultborder/10 last:border-b-0 transition-colors ${
                           selected
                             ? "bg-primary/10 border-s-[3px] border-s-primary"
                             : "hover:bg-light/40 dark:hover:bg-white/5 border-s-[3px] border-s-transparent"
                         }`}
                       >
-                        <div className="flex items-start gap-3">
+                        <div className="flex items-start gap-2.5 xl:gap-3">
                           <span
                             className={`avatar avatar-sm !rounded-md shrink-0 ${
                               selected
@@ -445,19 +505,23 @@ export default function TemplatesPage() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <p
-                              className={`font-medium text-[0.875rem] mb-1 leading-snug ${
+                              className={`font-medium text-[0.875rem] mb-0.5 xl:mb-1 leading-snug ${
                                 selected ? "text-primary" : ""
                               }`}
                             >
                               {t.name}
                             </p>
-                            <p className="text-[0.75rem] text-textmuted mb-2 leading-relaxed line-clamp-2">
+                            <p className="text-[0.75rem] text-textmuted mb-1.5 xl:mb-2 leading-relaxed line-clamp-1 xl:line-clamp-2">
                               {t.description}
                             </p>
                             <span className="badge bg-light text-defaulttextcolor text-[0.65rem]">
                               {categoryLabel(t.category)}
                             </span>
                           </div>
+                          <i
+                            className="ri-arrow-right-s-line text-textmuted text-lg shrink-0 md:hidden self-center"
+                            aria-hidden="true"
+                          />
                         </div>
                       </button>
                     </li>
@@ -466,18 +530,30 @@ export default function TemplatesPage() {
               </ul>
             </div>
 
-            {/* Editor */}
-            <div className="lg:col-span-8 col-span-12 flex flex-col min-h-0">
-              <div className="px-4 py-3 border-b border-defaultborder dark:border-defaultborder/10 shrink-0 space-y-3">
-                <h6 className="font-semibold text-[0.875rem] mb-0 truncate">
+            {/* Editor — full width on mobile (editor pane); ~67% from md */}
+            <div
+              className={`col-span-12 md:col-span-8 xl:col-span-8 flex-col min-h-0 min-w-0 ${
+                mobilePane === "editor" ? "flex" : "hidden md:flex"
+              }`}
+            >
+              <div className="px-3 py-2.5 xl:px-4 xl:py-3 border-b border-defaultborder dark:border-defaultborder/10 shrink-0 space-y-2 xl:space-y-3">
+                <button
+                  type="button"
+                  className="md:hidden inline-flex items-center gap-1.5 text-[0.8125rem] text-primary font-medium mb-1 !min-h-[2.75rem]"
+                  onClick={() => setMobilePane("library")}
+                >
+                  <i className="ri-arrow-left-line text-base" aria-hidden="true" />
+                  Template library
+                </button>
+                <h6 className="font-semibold text-[0.875rem] mb-0 break-words">
                   {draft.name}
                 </h6>
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2">
                   <nav className="flex gap-1" aria-label="Editor tabs">
                     <button
                       type="button"
                       onClick={() => setTab("edit")}
-                      className={`px-3 py-1.5 text-[0.75rem] font-medium rounded-md whitespace-nowrap ${
+                      className={`px-3 py-1.5 text-[0.75rem] font-medium rounded-md whitespace-nowrap !min-h-[2.75rem] md:!min-h-0 inline-flex items-center ${
                         tab === "edit"
                           ? "bg-primary/10 text-primary"
                           : "text-textmuted hover:text-primary"
@@ -488,7 +564,7 @@ export default function TemplatesPage() {
                     <button
                       type="button"
                       onClick={() => setTab("preview")}
-                      className={`px-3 py-1.5 text-[0.75rem] font-medium rounded-md whitespace-nowrap ${
+                      className={`px-3 py-1.5 text-[0.75rem] font-medium rounded-md whitespace-nowrap !min-h-[2.75rem] md:!min-h-0 inline-flex items-center ${
                         tab === "preview"
                           ? "bg-primary/10 text-primary"
                           : "text-textmuted hover:text-primary"
@@ -497,57 +573,13 @@ export default function TemplatesPage() {
                       Preview
                     </button>
                   </nav>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {isBuiltIn ? (
-                      <button
-                        type="button"
-                        className="ti-btn ti-btn-light !py-1.5 !px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0"
-                        onClick={handleReset}
-                        disabled={isSyncing}
-                        aria-label="Reset selected built-in template"
-                      >
-                        Reset
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="ti-btn ti-btn-danger !py-1.5 !px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0"
-                        onClick={handleDelete}
-                        disabled={isSyncing}
-                        aria-label="Delete selected custom template"
-                      >
-                        Delete
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="ti-btn ti-btn-primary !py-1.5 !px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0"
-                      onClick={handleSave}
-                      disabled={!isDirty || isSyncing}
-                      aria-label="Save template changes"
-                    >
-                      Save changes
-                    </button>
+                  <div className="hidden md:flex flex-wrap items-center gap-2">
+                    {editorActions}
                   </div>
                 </div>
               </div>
 
-              <div className="px-4 py-4 flex-1 overflow-y-auto min-h-0">
-                <FieldGroup label="Preview with lead">
-                  <select
-                    className="form-select form-select-sm w-full"
-                    value={previewLeadId}
-                    onChange={(e) => setPreviewLeadId(e.target.value)}
-                  >
-                    <option value="sample">Sample data</option>
-                    {leads.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.contactName} — {l.companyName}
-                      </option>
-                    ))}
-                  </select>
-                </FieldGroup>
-
+              <div className="px-3 py-3 xl:px-4 xl:py-4 flex-1 md:overflow-y-auto min-h-0 min-w-0 max-md:overflow-visible pb-[5.5rem] md:pb-4">
                 {tab === "edit" ? (
                   <>
                     <FieldGroup label="Template name">
@@ -591,6 +623,21 @@ export default function TemplatesPage() {
                       </select>
                     </FieldGroup>
 
+                    <FieldGroup label="Preview with lead">
+                      <select
+                        className="form-select form-select-sm w-full"
+                        value={previewLeadId}
+                        onChange={(e) => setPreviewLeadId(e.target.value)}
+                      >
+                        <option value="sample">Sample data</option>
+                        {leads.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.contactName} — {l.companyName}
+                          </option>
+                        ))}
+                      </select>
+                    </FieldGroup>
+
                     <FieldGroup
                       label="Subject"
                       insertAction={insertLink("subject")}
@@ -598,7 +645,7 @@ export default function TemplatesPage() {
                       <input
                         ref={subjectRef}
                         type="text"
-                        className="form-control w-full"
+                        className="form-control w-full break-words"
                         value={draft.subject}
                         onFocus={() => setInsertTarget("subject")}
                         onChange={(e) =>
@@ -607,13 +654,10 @@ export default function TemplatesPage() {
                       />
                     </FieldGroup>
 
-                    <FieldGroup
-                      label="Body"
-                      insertAction={insertLink("body")}
-                    >
+                    <FieldGroup label="Body" insertAction={insertLink("body")}>
                       <textarea
                         ref={bodyRef}
-                        className="form-control w-full min-h-[240px] text-[0.8125rem] resize-y"
+                        className="form-control w-full min-h-[280px] md:min-h-[220px] xl:min-h-[240px] text-[0.8125rem] resize-y"
                         value={draft.body}
                         onFocus={() => setInsertTarget("body")}
                         onChange={(e) =>
@@ -633,29 +677,34 @@ export default function TemplatesPage() {
                     </div>
                   </>
                 ) : (
-                  <div className="rounded-md border border-defaultborder dark:border-defaultborder/10 overflow-hidden min-h-[400px] flex flex-col">
-                    <div className="px-4 py-3 border-b border-defaultborder dark:border-defaultborder/10 bg-light/50 dark:bg-black/20">
+                  <div className="rounded-md border border-defaultborder dark:border-defaultborder/10 overflow-hidden min-h-[280px] md:min-h-[400px] flex flex-col">
+                    <div className="px-3 py-2.5 xl:px-4 xl:py-3 border-b border-defaultborder dark:border-defaultborder/10 bg-light/50 dark:bg-black/20">
                       <p className="text-[0.6875rem] uppercase tracking-wide text-textmuted mb-1">
                         Subject
                       </p>
-                      <p className="font-semibold text-[0.9375rem] mb-0 text-defaulttextcolor">
+                      <p className="font-semibold text-[0.9375rem] mb-0 text-defaulttextcolor break-words">
                         {previewSubject || "—"}
                       </p>
                     </div>
-                    <div className="px-4 py-3 border-b border-defaultborder dark:border-defaultborder/10 text-[0.75rem] text-textmuted bg-light/50 dark:bg-black/20">
+                    <div className="px-3 py-2.5 xl:px-4 xl:py-3 border-b border-defaultborder dark:border-defaultborder/10 text-[0.75rem] text-textmuted bg-light/50 dark:bg-black/20 break-words">
                       To:{" "}
                       <strong className="text-defaulttextcolor">
                         {previewVars.contact_name}
                       </strong>{" "}
                       · {previewVars.company_name}
                     </div>
-                    <div className="px-4 py-4 flex-1 bg-white">
-                      <div className="text-[0.8125rem] whitespace-pre-wrap font-sans mb-0 text-gray-800 leading-relaxed">
+                    <div className="px-3 py-3 xl:px-4 xl:py-4 flex-1 bg-white">
+                      <div className="text-[0.8125rem] whitespace-pre-wrap break-words font-sans mb-0 text-gray-800 leading-relaxed">
                         {previewBody || "—"}
                       </div>
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Mobile sticky Reset/Save — content-height page scroll, not 100vh shell */}
+              <div className="md:hidden sticky bottom-0 z-10 flex items-center gap-2 px-3 py-3 border-t border-defaultborder dark:border-defaultborder/10 bg-white dark:bg-bodybg pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
+                {editorActions}
               </div>
             </div>
           </div>
