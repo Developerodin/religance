@@ -174,7 +174,7 @@ export default function ContactsPage() {
             </div>
             <Link
               href="/lead-discovery"
-              className="ti-btn ti-btn-primary ti-btn-sm saved-contacts-cta"
+              className="ti-btn ti-btn-primary crm-btn crm-btn--md saved-contacts-cta"
             >
               <i className="ri-compass-3-line me-1"></i>
               Lead Discovery

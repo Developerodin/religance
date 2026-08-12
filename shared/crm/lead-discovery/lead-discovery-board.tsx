@@ -553,14 +553,16 @@ export default function LeadDiscoveryBoard() {
                 <div className="lead-discovery-mobile-card-foot">
                   <button
                     type="button"
-                    className="ti-btn ti-btn-sm ti-btn-primary !mb-0 !min-h-[2.75rem] !px-3"
+                    className="ti-btn ti-btn-primary crm-btn crm-btn--md"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleSaveLead(company);
                     }}
                   >
                     <i
-                      className={`${existingLead ? "ri-edit-line" : "ri-user-add-line"} me-1`}
+                      className={
+                        existingLead ? "ri-edit-line" : "ri-user-add-line"
+                      }
                       aria-hidden="true"
                     />
                     {existingLead ? "Edit Lead" : "Save Lead"}
