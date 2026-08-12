@@ -694,7 +694,7 @@ export default function LeadDiscoveryBoard() {
         </div>
 
         <div className="xxl:col-span-8 xl:col-span-12 col-span-12 min-w-0">
-          <div className="box custom-box !mb-0 border-0 !shadow-none !rounded-none h-full flex flex-col min-h-[calc(100vh-10rem)] min-w-0 xxl:!rounded-se-md xl:!rounded-b-md">
+          <div className="box custom-box !mb-0 border-0 !shadow-none !rounded-none h-full flex flex-col xl:min-h-[calc(100vh-10rem)] min-w-0 xxl:!rounded-se-md xl:!rounded-b-md">
             <div className="box-header border-b border-defaultborder dark:border-defaultborder/10 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
                 <div className="box-title mb-0">
@@ -829,7 +829,7 @@ export default function LeadDiscoveryBoard() {
       </div>
 
       {/* Mobile: progressive Salts → Medicines → Results */}
-      <div className="lead-discovery-mobile xl:hidden border border-defaultborder dark:border-defaultborder/10 rounded-md bg-white dark:bg-bodybg overflow-hidden">
+      <div className="lead-discovery-mobile xl:hidden border border-defaultborder dark:border-defaultborder/10 rounded-md bg-white dark:bg-bodybg">
         <div className="lead-discovery-mobile-header">
           {mobileStep !== "salts" ? (
             <button

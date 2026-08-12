@@ -156,7 +156,8 @@ export default function MedicinesTablePanel({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto">
+      {/* ponytail: xl:flex-1 only — nested/tablet must not grow empty pane height */}
+      <div className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto xl:flex-1">
         {checkedSaltIds.length === 0 ? (
           <div className="text-center py-8 px-4">
             <p className="text-textmuted dark:text-textmuted/90 mb-0 text-[0.8125rem]">

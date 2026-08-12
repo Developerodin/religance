@@ -102,7 +102,8 @@ export default function SaltsTablePanel({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto">
+      {/* ponytail: xl:flex-1 only — nested/tablet must not grow empty pane height */}
+      <div className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto xl:flex-1">
         <table className="table table-hover ti-custom-table w-full table-fixed mb-0 text-[0.8125rem]">
           <thead className="ti-custom-table-head lead-discovery-col-header">
             <tr>
