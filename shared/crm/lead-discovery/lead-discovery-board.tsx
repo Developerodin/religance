@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  findLeadForDiscoveredCompany,
   getCompaniesForCheckedMedicines,
   getCompaniesFromLeads,
   getMedicinesForCheckedSalts,
+  resolveMedicineIdForDiscoveredCompany,
   type DiscoveryMedicine,
 } from "@/shared/crm/lead-discovery/discovery-catalog";
 import { formatBuyerSubtitle } from "@/shared/crm/lead-discovery/discovery-excel";
@@ -28,12 +30,19 @@ import {
   type ResultsSortDirection,
 } from "@/shared/crm/lead-discovery/utils";
 import { useCrm } from "@/shared/crm/store/crm-context";
-import { leadNewHref } from "@/shared/crm/active-leads/active-leads-utils";
+import {
+  companyInitials,
+  leadEditHref,
+  leadNewHref,
+} from "@/shared/crm/active-leads/active-leads-utils";
 import { resolvePrefillSaltId } from "@/shared/crm/store/lead-form-utils";
+import { BottomSheet } from "@/shared/crm/ui/bottom-sheet";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const PANEL_SCROLL_MAX = "calc(100vh - 11rem)";
+
+type MobileStep = "salts" | "medicines" | "results";
 
 function SortableColumnHeader({
   column,
@@ -135,6 +144,9 @@ export default function LeadDiscoveryBoard() {
   const [sortDirection, setSortDirection] =
     useState<ResultsSortDirection | null>(null);
   const [urlSelectionApplied, setUrlSelectionApplied] = useState(false);
+  const [mobileStep, setMobileStep] = useState<MobileStep>("salts");
+  const [mobileBootstrapped, setMobileBootstrapped] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const medicines = useMemo(
     () => getMedicinesForCheckedSalts(checkedSaltIds, allMedicines),
@@ -286,6 +298,22 @@ export default function LeadDiscoveryBoard() {
     catalogueCompanies,
   ]);
 
+  // One-shot: deep links land on the deepest valid mobile step.
+  useEffect(() => {
+    if (mobileBootstrapped || !urlSelectionApplied) return;
+    if (checkedSaltIds.length && checkedMedicineIds.length) {
+      setMobileStep("results");
+    } else if (checkedSaltIds.length) {
+      setMobileStep("medicines");
+    }
+    setMobileBootstrapped(true);
+  }, [
+    mobileBootstrapped,
+    urlSelectionApplied,
+    checkedSaltIds.length,
+    checkedMedicineIds.length,
+  ]);
+
   const handleSortColumn = useCallback((column: ResultsSortColumn) => {
     if (sortColumn !== column) {
       setSortColumn(column);
@@ -332,8 +360,59 @@ export default function LeadDiscoveryBoard() {
     );
   };
 
+  const handleSaveLead = (company: DiscoveredCompany) => {
+    const medicineId = resolveMedicineIdForDiscoveredCompany(
+      company,
+      allMedicines,
+      activeMedicine?.id ?? null
+    );
+    const medicineForPrefill =
+      (medicineId
+        ? allMedicines.find((m) => m.id === medicineId)
+        : undefined) ?? activeMedicine ?? undefined;
+    const saltId =
+      resolvePrefillSaltId(activeSaltId, medicineForPrefill) || null;
+    const existingLead = findLeadForDiscoveredCompany(leads, company, {
+      medicineId,
+      matchedMedicine: company.matchedMedicine,
+    });
+
+    if (existingLead) {
+      router.push(
+        leadEditHref(existingLead.id, {
+          from: "discovery",
+          saltId,
+          medicineId,
+        })
+      );
+      return;
+    }
+
+    const contactName = company.contactPersons?.find((n) => n && n !== "—");
+    router.push(
+      leadNewHref({
+        from: "discovery",
+        medicineId,
+        saltId,
+        companyName: company.companyName,
+        companyType: company.companyType,
+        location: company.location,
+        country: company.location,
+        contactName,
+        contactRole: company.designations?.[0],
+        contactEmail: company.emails?.[0],
+        contactPhone: company.phoneNumbers?.[0],
+      })
+    );
+  };
+
   const clearResultFilters = () => {
     setResultFilters(EMPTY_LEAD_DISCOVERY_FILTERS);
+  };
+
+  const handleMobileBack = () => {
+    if (mobileStep === "results") setMobileStep("medicines");
+    else if (mobileStep === "medicines") setMobileStep("salts");
   };
 
   const resultsStatus = buyersError ? (
@@ -350,12 +429,245 @@ export default function LeadDiscoveryBoard() {
   ) : null;
 
   const filtersActive = hasActiveFilters(resultFilters);
+  const sheetFilterCount = [
+    resultFilters.companyType,
+    resultFilters.location,
+    resultFilters.salt,
+    resultFilters.medicine,
+  ].filter(Boolean).length;
   const noSaltSelected = checkedSaltIds.length === 0;
   const noMedicineSelected = checkedMedicineIds.length === 0;
 
+  const mobileTitle =
+    mobileStep === "salts"
+      ? "Salts"
+      : mobileStep === "medicines"
+        ? "Medicines"
+        : "Results";
+
+  const resultsEmptyMessage = buyersError
+    ? `Could not load buyers: ${buyersError}`
+    : catalogueBuyers.length === 0
+      ? "No buyer data loaded. Import Excel or check backend access."
+      : catalogueCompanies.length === 0
+        ? "No buyers found for the selected salt(s) and medicine(s). Link medicines to salts in Settings, or import matching buyer rows."
+        : filtersActive
+          ? "No buyers match the current filters. Try clearing filters or broadening your search."
+          : "No buyers found for this selection.";
+
+  const renderResultsBody = (variant: "table" | "cards") => {
+    if (noSaltSelected) {
+      return (
+        <EmptyPanel
+          icon="ri-flask-line"
+          message="Select one or more salts on the left to filter medicines and buyers"
+        />
+      );
+    }
+    if (noMedicineSelected) {
+      return (
+        <EmptyPanel
+          icon="ri-capsule-line"
+          message="Select one or more medicines to view matching buyers"
+        />
+      );
+    }
+    if (buyersLoading) {
+      return (
+        <EmptyPanel
+          icon="ri-loader-4-line"
+          message="Loading buyers from catalogue…"
+        />
+      );
+    }
+    if (filteredCompanies.length === 0) {
+      return <EmptyPanel icon="ri-search-line" message={resultsEmptyMessage} />;
+    }
+
+    if (variant === "cards") {
+      return (
+        <div className="lead-discovery-mobile-cards">
+          {displayCompanies.map((company) => {
+            const contact =
+              company.contactPersons?.find((n) => n && n !== "—") ?? "—";
+            const existingLead = findLeadForDiscoveredCompany(leads, company, {
+              medicineId: resolveMedicineIdForDiscoveredCompany(
+                company,
+                allMedicines,
+                activeMedicine?.id ?? null
+              ),
+              matchedMedicine: company.matchedMedicine,
+            });
+            return (
+              <div key={company.id} className="lead-discovery-mobile-card">
+                <button
+                  type="button"
+                  className="lead-discovery-mobile-card-main"
+                  onClick={() => setProfileCompany(company)}
+                  aria-label={`Open ${company.companyName}`}
+                >
+                  <div className="lead-discovery-mobile-card-head">
+                    <span className="lead-discovery-mobile-avatar">
+                      {companyInitials(company.companyName)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="lead-discovery-mobile-card-title">
+                        {company.companyName}
+                      </p>
+                      <p className="lead-discovery-mobile-card-sub">
+                        {formatBuyerSubtitle(company)}
+                      </p>
+                      {company.sourceProof === "Created lead" && (
+                        <span className="badge bg-primary/10 text-primary text-[0.65rem] mt-1 inline-block">
+                          Created lead
+                        </span>
+                      )}
+                    </div>
+                    <LeadScoreBadge score={company.leadScore} />
+                  </div>
+                  <div className="lead-discovery-mobile-card-grid">
+                    <div>
+                      <span className="lead-discovery-mobile-card-label">
+                        Contact
+                      </span>
+                      <p className="lead-discovery-mobile-card-strong">
+                        {contact}
+                      </p>
+                      <p className="lead-discovery-mobile-card-muted">
+                        {company.designations?.[0] || company.companyType}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="lead-discovery-mobile-card-label">
+                        Product
+                      </span>
+                      <p className="lead-discovery-mobile-card-strong">
+                        {company.matchedSalt}
+                      </p>
+                      <p className="lead-discovery-mobile-card-muted">
+                        {company.matchedMedicine}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+                <div className="lead-discovery-mobile-card-foot">
+                  <button
+                    type="button"
+                    className="ti-btn ti-btn-sm ti-btn-primary !mb-0 !min-h-[2.75rem] !px-3"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSaveLead(company);
+                    }}
+                  >
+                    <i
+                      className={`${existingLead ? "ri-edit-line" : "ri-user-add-line"} me-1`}
+                      aria-hidden="true"
+                    />
+                    {existingLead ? "Edit Lead" : "Save Lead"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    return (
+      <div className="table-responsive lead-discovery-results">
+        <table className="table table-hover ti-custom-table mb-0 w-full">
+          <thead className="ti-custom-table-head lead-discovery-col-header">
+            <tr>
+              <SortableColumnHeader
+                column="company"
+                label="Company"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={handleSortColumn}
+              />
+              <SortableColumnHeader
+                column="type"
+                label="Type"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={handleSortColumn}
+              />
+              <SortableColumnHeader
+                column="location"
+                label="Location"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={handleSortColumn}
+              />
+              <SortableColumnHeader
+                column="score"
+                label="Score"
+                align="end"
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={handleSortColumn}
+              />
+            </tr>
+          </thead>
+          <tbody>
+            {displayCompanies.map((company: DiscoveredCompany) => {
+              const isSelected = profileCompany?.id === company.id;
+              return (
+                <tr
+                  key={company.id}
+                  className={isSelected ? "table-active" : ""}
+                >
+                  <td className="min-w-0">
+                    <button
+                      type="button"
+                      className="font-semibold text-defaulttextcolor text-start hover:text-primary p-0 border-0 bg-transparent block max-w-full truncate"
+                      title={company.companyName}
+                      onClick={() => setProfileCompany(company)}
+                    >
+                      {company.companyName}
+                    </button>
+                    {company.sourceProof === "Created lead" && (
+                      <span className="badge bg-primary/10 text-primary text-[0.65rem] ms-2 align-middle whitespace-nowrap">
+                        Created lead
+                      </span>
+                    )}
+                    <div
+                      className="text-[0.75rem] text-textmuted dark:text-textmuted/90 truncate"
+                      title={formatBuyerSubtitle(company)}
+                    >
+                      {formatBuyerSubtitle(company)}
+                    </div>
+                  </td>
+                  <td>
+                    <span
+                      className="badge bg-light text-defaulttextcolor max-w-full truncate inline-block"
+                      title={company.companyType}
+                    >
+                      {company.companyType}
+                    </span>
+                  </td>
+                  <td
+                    className="text-[0.8125rem] truncate"
+                    title={company.location}
+                  >
+                    {company.location}
+                  </td>
+                  <td className="text-end whitespace-nowrap">
+                    <LeadScoreBadge score={company.leadScore} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <>
-      <div className="lead-discovery-board grid grid-cols-12 gap-0 border border-defaultborder dark:border-defaultborder/10 rounded-md bg-white dark:bg-bodybg">
+      {/* Desktop: unchanged 3-pane workspace */}
+      <div className="lead-discovery-board hidden md:grid grid-cols-12 gap-0 border border-defaultborder dark:border-defaultborder/10 rounded-md bg-white dark:bg-bodybg">
         <div className="xxl:col-span-2 xl:col-span-4 col-span-12 min-w-0 border-e border-defaultborder dark:border-defaultborder/10">
           <div className="mb-0 h-full min-w-0">
             <SaltsTablePanel
@@ -506,131 +818,291 @@ export default function LeadDiscoveryBoard() {
                 className="lead-discovery-results-panel"
                 style={{ maxHeight: PANEL_SCROLL_MAX }}
               >
-                {noSaltSelected ? (
-                  <EmptyPanel
-                    icon="ri-flask-line"
-                    message="Select one or more salts on the left to filter medicines and buyers"
-                  />
-                ) : noMedicineSelected ? (
-                  <EmptyPanel
-                    icon="ri-capsule-line"
-                    message="Select one or more medicines to view matching buyers"
-                  />
-                ) : buyersLoading ? (
-                  <EmptyPanel
-                    icon="ri-loader-4-line"
-                    message="Loading buyers from catalogue…"
-                  />
-                ) : filteredCompanies.length === 0 ? (
-                  <EmptyPanel
-                    icon="ri-search-line"
-                    message={
-                      buyersError
-                        ? `Could not load buyers: ${buyersError}`
-                        : catalogueBuyers.length === 0
-                          ? "No buyer data loaded. Import Excel or check backend access."
-                          : catalogueCompanies.length === 0
-                            ? "No buyers found for the selected salt(s) and medicine(s). Link medicines to salts in Settings, or import matching buyer rows."
-                            : filtersActive
-                              ? "No buyers match the current filters. Try clearing filters or broadening your search."
-                              : "No buyers found for this selection."
-                    }
-                  />
-                ) : (
-                  <div className="table-responsive lead-discovery-results">
-                    <table className="table table-hover ti-custom-table mb-0 w-full">
-                      <thead className="ti-custom-table-head lead-discovery-col-header">
-                        <tr>
-                          <SortableColumnHeader
-                            column="company"
-                            label="Company"
-                            sortColumn={sortColumn}
-                            sortDirection={sortDirection}
-                            onSort={handleSortColumn}
-                          />
-                          <SortableColumnHeader
-                            column="type"
-                            label="Type"
-                            sortColumn={sortColumn}
-                            sortDirection={sortDirection}
-                            onSort={handleSortColumn}
-                          />
-                          <SortableColumnHeader
-                            column="location"
-                            label="Location"
-                            sortColumn={sortColumn}
-                            sortDirection={sortDirection}
-                            onSort={handleSortColumn}
-                          />
-                          <SortableColumnHeader
-                            column="score"
-                            label="Score"
-                            align="end"
-                            sortColumn={sortColumn}
-                            sortDirection={sortDirection}
-                            onSort={handleSortColumn}
-                          />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {displayCompanies.map((company: DiscoveredCompany) => {
-                          const isSelected =
-                            profileCompany?.id === company.id;
-                          return (
-                            <tr
-                              key={company.id}
-                              className={isSelected ? "table-active" : ""}
-                            >
-                              <td className="min-w-0">
-                                <button
-                                  type="button"
-                                  className="font-semibold text-defaulttextcolor text-start hover:text-primary p-0 border-0 bg-transparent block max-w-full truncate"
-                                  title={company.companyName}
-                                  onClick={() => setProfileCompany(company)}
-                                >
-                                  {company.companyName}
-                                </button>
-                                {company.sourceProof === "Created lead" && (
-                                  <span className="badge bg-primary/10 text-primary text-[0.65rem] ms-2 align-middle whitespace-nowrap">
-                                    Created lead
-                                  </span>
-                                )}
-                                <div
-                                  className="text-[0.75rem] text-textmuted dark:text-textmuted/90 truncate"
-                                  title={formatBuyerSubtitle(company)}
-                                >
-                                  {formatBuyerSubtitle(company)}
-                                </div>
-                              </td>
-                              <td>
-                                <span
-                                  className="badge bg-light text-defaulttextcolor max-w-full truncate inline-block"
-                                  title={company.companyType}
-                                >
-                                  {company.companyType}
-                                </span>
-                              </td>
-                              <td
-                                className="text-[0.8125rem] truncate"
-                                title={company.location}
-                              >
-                                {company.location}
-                              </td>
-                              <td className="text-end whitespace-nowrap">
-                                <LeadScoreBadge score={company.leadScore} />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                {renderResultsBody("table")}
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Mobile: progressive Salts → Medicines → Results */}
+      <div className="lead-discovery-mobile md:hidden border border-defaultborder dark:border-defaultborder/10 rounded-md bg-white dark:bg-bodybg overflow-hidden">
+        <div className="lead-discovery-mobile-header">
+          {mobileStep !== "salts" ? (
+            <button
+              type="button"
+              className="ti-btn ti-btn-light !mb-0 !min-h-[2.75rem] !min-w-[2.75rem] !p-0 inline-flex items-center justify-center"
+              onClick={handleMobileBack}
+              aria-label={
+                mobileStep === "results"
+                  ? "Back to medicines"
+                  : "Back to salts"
+              }
+            >
+              <i className="ri-arrow-left-line text-lg" aria-hidden="true" />
+            </button>
+          ) : (
+            <span className="w-11 shrink-0" aria-hidden="true" />
+          )}
+          <div className="min-w-0 flex-1 text-center">
+            <div className="box-title mb-0 text-[0.9375rem] before:!hidden">
+              {mobileTitle}
+            </div>
+            {mobileStep === "results" &&
+              !noSaltSelected &&
+              !noMedicineSelected && (
+                <p className="mb-0 text-[0.75rem] text-textmuted truncate">
+                  {filteredCompanies.length} buyers · {checkedSaltIds.length}{" "}
+                  salt{checkedSaltIds.length === 1 ? "" : "s"}
+                </p>
+              )}
+          </div>
+          <button
+            type="button"
+            className="ti-btn ti-btn-primary !mb-0 !min-h-[2.75rem] !min-w-[2.75rem] !p-0 inline-flex items-center justify-center"
+            onClick={handleNewLead}
+            aria-label="New Lead"
+          >
+            <i className="ri-add-line text-lg" aria-hidden="true" />
+          </button>
+        </div>
+
+        {mobileStep === "salts" && (
+          <div className="lead-discovery-mobile-step">
+            <div className="lead-discovery-mobile-panel">
+              <SaltsTablePanel
+                checkedSaltIds={checkedSaltIds}
+                onCheckedChange={setCheckedSaltIds}
+              />
+            </div>
+            <div className="lead-discovery-mobile-cta">
+              <span className="text-[0.8125rem] text-defaulttextcolor font-medium tabular-nums">
+                {checkedSaltIds.length} salt
+                {checkedSaltIds.length === 1 ? "" : "s"} selected
+              </span>
+              <button
+                type="button"
+                className="ti-btn ti-btn-primary !mb-0 !min-h-[2.75rem] !px-3 !text-[0.8125rem] disabled:opacity-40"
+                disabled={noSaltSelected}
+                onClick={() => setMobileStep("medicines")}
+              >
+                View medicines
+                <i className="ri-arrow-right-line ms-1" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mobileStep === "medicines" && (
+          <div className="lead-discovery-mobile-step">
+            <div className="lead-discovery-mobile-panel">
+              <MedicinesTablePanel
+                checkedSaltIds={checkedSaltIds}
+                checkedMedicineIds={checkedMedicineIds}
+                onCheckedChange={setCheckedMedicineIds}
+                activeMedicineId={activeMedicineId}
+                onActiveMedicineChange={handleActiveMedicineChange}
+                onSelectionChange={handleMedicineSelectionChange}
+              />
+            </div>
+            <div className="lead-discovery-mobile-cta">
+              <span className="text-[0.8125rem] text-defaulttextcolor font-medium tabular-nums">
+                {checkedMedicineIds.length} medicine
+                {checkedMedicineIds.length === 1 ? "" : "s"} selected
+              </span>
+              <button
+                type="button"
+                className="ti-btn ti-btn-primary !mb-0 !min-h-[2.75rem] !px-3 !text-[0.8125rem] disabled:opacity-40"
+                disabled={noMedicineSelected}
+                onClick={() => setMobileStep("results")}
+              >
+                View results
+                <i className="ri-arrow-right-line ms-1" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mobileStep === "results" && (
+          <div className="lead-discovery-mobile-step">
+            {!noSaltSelected && !noMedicineSelected && (
+              <div className="lead-discovery-mobile-toolbar">
+                <div className="relative flex-1 min-w-0">
+                  <i
+                    className="ri-search-line absolute start-3 top-1/2 -translate-y-1/2 text-textmuted pointer-events-none"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="search"
+                    className="form-control !ps-9 !min-h-[2.75rem] !text-[0.8125rem]"
+                    placeholder="Search buyers…"
+                    aria-label="Search buyers"
+                    value={resultFilters.search}
+                    onChange={(e) =>
+                      setResultFilters((f) => ({
+                        ...f,
+                        search: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-light shrink-0 !mb-0 !min-h-[2.75rem] !text-[0.8125rem]"
+                  onClick={() => setFiltersOpen(true)}
+                >
+                  <i className="ri-equalizer-line me-1" aria-hidden="true" />
+                  Filters
+                  {sheetFilterCount > 0 && (
+                    <span className="badge bg-primary text-white ms-1">
+                      {sheetFilterCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
+            {resultsStatus && (
+              <div className="px-3 pb-2 text-[0.75rem]">{resultsStatus}</div>
+            )}
+            <div className="lead-discovery-mobile-results">
+              {renderResultsBody("cards")}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {filtersOpen && (
+        <BottomSheet title="Filters" onClose={() => setFiltersOpen(false)}>
+          <div className="box-body space-y-3">
+            <div>
+              <label
+                className="form-label text-[0.7rem] mb-1"
+                htmlFor="ld-sheet-type"
+              >
+                Company type
+              </label>
+              <select
+                id="ld-sheet-type"
+                className="form-select !min-h-[2.75rem] !text-[0.8125rem]"
+                value={resultFilters.companyType}
+                onChange={(e) =>
+                  setResultFilters((f) => ({
+                    ...f,
+                    companyType: e.target.value,
+                  }))
+                }
+              >
+                <option value="">All types</option>
+                {filterOptions.companyTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                className="form-label text-[0.7rem] mb-1"
+                htmlFor="ld-sheet-location"
+              >
+                Location
+              </label>
+              <select
+                id="ld-sheet-location"
+                className="form-select !min-h-[2.75rem] !text-[0.8125rem]"
+                value={resultFilters.location}
+                onChange={(e) =>
+                  setResultFilters((f) => ({
+                    ...f,
+                    location: e.target.value,
+                  }))
+                }
+              >
+                <option value="">All locations</option>
+                {filterOptions.locations.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                className="form-label text-[0.7rem] mb-1"
+                htmlFor="ld-sheet-salt"
+              >
+                Salt
+              </label>
+              <select
+                id="ld-sheet-salt"
+                className="form-select !min-h-[2.75rem] !text-[0.8125rem]"
+                value={resultFilters.salt}
+                onChange={(e) =>
+                  setResultFilters((f) => ({
+                    ...f,
+                    salt: e.target.value,
+                  }))
+                }
+              >
+                <option value="">All salts</option>
+                {filterOptions.salts.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                className="form-label text-[0.7rem] mb-1"
+                htmlFor="ld-sheet-medicine"
+              >
+                Medicine
+              </label>
+              <select
+                id="ld-sheet-medicine"
+                className="form-select !min-h-[2.75rem] !text-[0.8125rem]"
+                value={resultFilters.medicine}
+                onChange={(e) =>
+                  setResultFilters((f) => ({
+                    ...f,
+                    medicine: e.target.value,
+                  }))
+                }
+              >
+                <option value="">All medicines</option>
+                {filterOptions.medicines.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                className="ti-btn ti-btn-light flex-1 !mb-0 !min-h-[2.75rem]"
+                onClick={() =>
+                  setResultFilters((f) => ({
+                    ...EMPTY_LEAD_DISCOVERY_FILTERS,
+                    search: f.search,
+                  }))
+                }
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                className="ti-btn ti-btn-primary flex-1 !mb-0 !min-h-[2.75rem]"
+                onClick={() => setFiltersOpen(false)}
+              >
+                Show {filteredCompanies.length} buyer
+                {filteredCompanies.length === 1 ? "" : "s"}
+              </button>
+            </div>
+          </div>
+        </BottomSheet>
+      )}
 
       <CompanyProfileDrawer
         company={profileCompany}

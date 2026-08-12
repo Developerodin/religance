@@ -690,6 +690,191 @@ html[data-nav-layout="vertical"]:not([data-toggled="menu-click-closed"]):not([da
   border-radius: inherit;
 }
 
+/* Lead Discovery — mobile progressive drill-down (Salts → Medicines → Results) */
+.lead-discovery-mobile {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 8.5rem);
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.lead-discovery-mobile-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid rgb(var(--default-border) / 1);
+  @apply border-defaultborder dark:border-defaultborder/10;
+}
+
+.lead-discovery-mobile-step {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.lead-discovery-mobile-panel {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+
+  .lead-discovery-salts,
+  .lead-discovery-medicines {
+    min-height: 0 !important;
+    height: 100%;
+    max-height: calc(100vh - 12.5rem);
+  }
+}
+
+.lead-discovery-mobile-cta {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgb(var(--default-border) / 1);
+  background: rgb(var(--custom-white) / 1);
+  @apply border-defaultborder dark:border-defaultborder/10 dark:bg-bodybg;
+}
+
+.lead-discovery-mobile-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid rgb(var(--default-border) / 1);
+  @apply border-defaultborder dark:border-defaultborder/10;
+}
+
+.lead-discovery-mobile-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.lead-discovery-mobile-cards {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+.lead-discovery-mobile-card {
+  border: 1px solid rgb(var(--default-border) / 1);
+  border-radius: 0.5rem;
+  background: rgb(var(--custom-white) / 1);
+  overflow: hidden;
+  @apply border-defaultborder dark:border-defaultborder/10 dark:bg-bodybg;
+}
+
+.lead-discovery-mobile-card-main {
+  display: block;
+  width: 100%;
+  text-align: start;
+  padding: 0.875rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+
+  &:active {
+    background-color: rgb(var(--primary-rgb) / 0.05);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px rgb(var(--primary-rgb) / 0.35);
+  }
+}
+
+.lead-discovery-mobile-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+}
+
+.lead-discovery-mobile-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background-color: rgb(var(--primary-rgb) / 0.1);
+  flex-shrink: 0;
+  @apply text-primary;
+}
+
+.lead-discovery-mobile-card-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 0.125rem;
+  overflow-wrap: anywhere;
+  @apply text-defaulttextcolor;
+}
+
+.lead-discovery-mobile-card-sub {
+  font-size: 0.75rem;
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+  @apply text-textmuted;
+}
+
+.lead-discovery-mobile-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgb(var(--default-border) / 1);
+  @apply border-defaultborder dark:border-defaultborder/10;
+}
+
+.lead-discovery-mobile-card-label {
+  display: block;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.25rem;
+  @apply text-textmuted;
+}
+
+.lead-discovery-mobile-card-strong {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+  @apply text-defaulttextcolor;
+}
+
+.lead-discovery-mobile-card-muted {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+  @apply text-textmuted;
+}
+
+.lead-discovery-mobile-card-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0.875rem 0.875rem;
+}
+
 .lead-discovery-results-panel {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
