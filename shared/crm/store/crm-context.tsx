@@ -1580,10 +1580,19 @@ export function CrmProvider({ children }: { children: ReactNode }) {
       const { profile, option } = input;
       const contactIdx = input.contactIndex ?? 0;
       const openCompose = option === "create_lead_and_email";
+      // patch() is setState — its updater runs at render, not now. The lead id is
+      // resolved here (reused or minted) or the caller reads back a null leadId.
+      // ponytail: reads state.leads, not prev.leads — same value at click time.
+      const reusedLeadId = state.leads.find(
+        (l) => l.discoveryCompanyId === profile.id
+      )?.id;
+      const newLeadId = generateCrmId("lead");
       const result = {
         companyId: "",
         contactId: null as string | null,
-        leadId: null as string | null,
+        leadId: optionCreatesLead(option)
+          ? (reusedLeadId ?? newLeadId)
+          : (null as string | null),
         openCompose,
       };
 
@@ -1658,11 +1667,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           const existingLead = leads.find(
             (l) => l.discoveryCompanyId === profile.id
           );
-          if (existingLead) {
-            result.leadId = existingLead.id;
-          } else {
+          if (!existingLead) {
           const lead: CrmLead = {
-            id: generateCrmId("lead"),
+            id: newLeadId,
             title: buildLeadTitle(profile, profile.companyName),
             companyId: company.id,
             contactId: result.contactId,
@@ -1685,7 +1692,6 @@ export function CrmProvider({ children }: { children: ReactNode }) {
             sourceLinks: profile.sourceLinks,
           };
           leads = [...leads, lead];
-          result.leadId = lead.id;
           timeline = appendTimeline(timeline, {
             leadId: lead.id,
             date: todayIso(),
@@ -1705,15 +1711,18 @@ export function CrmProvider({ children }: { children: ReactNode }) {
 
       return result;
     },
-    [patch]
+    [patch, state.leads]
   );
 
   const createLeadWithCompany = useCallback(
     (input: CreateLeadWithCompanyInput) => {
+      // patch() is setState — its updater runs at render, not now. So the lead id
+      // is minted up front (same as addSample) or callers read back an empty string.
+      const leadId = generateCrmId("lead");
       const result = {
         companyId: "",
         contactId: null as string | null,
-        leadId: "",
+        leadId,
       };
 
       patch((prev) => {
@@ -1833,7 +1842,7 @@ export function CrmProvider({ children }: { children: ReactNode }) {
               : [];
 
         const lead: CrmLead = {
-          id: generateCrmId("lead"),
+          id: leadId,
           title:
             input.lead.title ||
             `${input.lead.matchedMedicine} — ${company.name}`,
@@ -1871,7 +1880,6 @@ export function CrmProvider({ children }: { children: ReactNode }) {
           sourceLinks: [],
         };
         leads = [...leads, lead];
-        result.leadId = lead.id;
         timeline = appendTimeline(timeline, {
           leadId: lead.id,
           date: todayIso(),
