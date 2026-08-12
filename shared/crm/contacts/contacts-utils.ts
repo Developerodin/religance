@@ -103,6 +103,21 @@ export function hasContactFilters(search: string, companyFilter: string): boolea
   return Boolean(search.trim() || companyFilter);
 }
 
+/** Prefer explicit country; fall back to free-text location. */
+export function contactCountry(company: CrmCompany | undefined): string {
+  const value = company?.country?.trim() || company?.location?.trim();
+  return value || "—";
+}
+
+export function leadStatusLabel(row: EnrichedContact): string {
+  if (row.leadCount === 0) return "No leads";
+  const parts = [`${row.leadCount} lead${row.leadCount !== 1 ? "s" : ""}`];
+  if (row.activeLeadCount > 0) {
+    parts.push(`${row.activeLeadCount} active`);
+  }
+  return parts.join(" · ");
+}
+
 export function resolveSendEmailTarget(row: EnrichedContact): SendEmailTarget {
   const activeLead =
     row.leads.find((l) => !isTerminalStage(l.stage)) ?? row.leads[0];

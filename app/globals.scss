@@ -3053,6 +3053,11 @@ body:has(.lead-form-page) {
 
   .saved-contacts-cta {
     flex-shrink: 0;
+
+    @media (max-width: 767.98px) {
+      width: 100% !important;
+      max-width: none;
+    }
   }
 
   /* Horizontal stat strip (scoped here — not under .active-leads-page) */
@@ -3066,12 +3071,9 @@ body:has(.lead-form-page) {
       background: rgb(0 0 0 / 0.15);
     }
 
+    /* 2×2 all the way down — four stacked cards eat the whole phone viewport. */
     @media (max-width: 991.98px) {
       grid-template-columns: repeat(2, 1fr);
-    }
-
-    @media (max-width: 575.98px) {
-      grid-template-columns: 1fr;
     }
   }
 
@@ -3095,13 +3097,9 @@ body:has(.lead-form-page) {
       }
     }
 
-    @media (max-width: 575.98px) {
-      border-inline-end: none !important;
-      border-bottom: 1px solid rgb(var(--default-border) / 1);
-
-      &:last-child {
-        border-bottom: none;
-      }
+    @media (max-width: 767.98px) {
+      gap: 0.5rem;
+      padding: 0.65rem 0.75rem;
     }
   }
 
@@ -3114,6 +3112,13 @@ body:has(.lead-form-page) {
     border-radius: 0.5rem;
     font-size: 1.1rem;
     flex-shrink: 0;
+
+    @media (max-width: 767.98px) {
+      width: 1.85rem;
+      height: 1.85rem;
+      font-size: 0.95rem;
+      border-radius: 0.4rem;
+    }
 
     &.tone-primary {
       background-color: rgb(var(--primary-rgb) / 0.12);
@@ -3135,6 +3140,10 @@ body:has(.lead-form-page) {
     margin-bottom: 0.1rem;
     line-height: 1.2;
     @apply text-textmuted;
+
+    @media (max-width: 767.98px) {
+      font-size: 0.625rem;
+    }
   }
 
   .saved-contacts-stat-value {
@@ -3143,6 +3152,10 @@ body:has(.lead-form-page) {
     margin-bottom: 0;
     line-height: 1.2;
     @apply text-defaulttextcolor;
+
+    @media (max-width: 767.98px) {
+      font-size: 1.05rem;
+    }
   }
 
   .saved-contacts-toolbar {
@@ -3248,6 +3261,118 @@ body:has(.lead-form-page) {
     &:active {
       transform: scale(0.97);
     }
+  }
+
+  /* Mobile contact cards — no horizontal table scroll below md. */
+  .saved-contacts-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.75rem;
+  }
+
+  .saved-contacts-card {
+    display: block;
+    width: 100%;
+    text-align: start;
+    margin: 0;
+    padding: 0.9rem;
+    border: 1px solid rgb(var(--default-border) / 1);
+    border-radius: 0.5rem;
+    background: rgb(var(--custom-white) / 1);
+    cursor: pointer;
+    transition:
+      border-color 0.12s ease,
+      background-color 0.12s ease;
+
+    &:hover,
+    &:focus-visible {
+      border-color: rgb(var(--primary-rgb) / 0.35);
+      background-color: rgb(var(--primary-rgb) / 0.03);
+      outline: none;
+    }
+  }
+
+  .saved-contacts-card-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .saved-contacts-card-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 0.1rem;
+    @apply text-defaulttextcolor;
+  }
+
+  .saved-contacts-card-role {
+    font-size: 0.75rem;
+    line-height: 1.3;
+    margin-bottom: 0;
+    @apply text-textmuted;
+  }
+
+  .saved-contacts-card-lead {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 0.2rem 0.45rem;
+    @apply bg-light text-textmuted;
+
+    &.has-leads {
+      @apply bg-primary/10 text-primary;
+    }
+  }
+
+  .saved-contacts-card-email {
+    font-size: 0.75rem;
+    margin-bottom: 0.35rem;
+    word-break: break-all;
+    @apply text-defaulttextcolor;
+  }
+
+  .saved-contacts-card-company {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    margin-bottom: 0.65rem;
+    min-width: 0;
+    @apply text-textmuted;
+
+    i {
+      font-size: 0.85rem;
+    }
+  }
+
+  .saved-contacts-card-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .saved-contacts-card-date {
+    font-size: 0.7rem;
+    @apply text-textmuted;
+  }
+
+  .saved-contacts-card-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .saved-contacts-card-view {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+    @apply text-primary;
   }
 
   .saved-contacts-table-wrap {

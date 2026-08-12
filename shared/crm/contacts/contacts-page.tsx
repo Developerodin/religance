@@ -4,10 +4,12 @@ import { companyInitials } from "@/shared/crm/active-leads/active-leads-utils";
 import { ActiveLeadDetailDrawer } from "@/shared/crm/active-leads/active-lead-detail-drawer";
 import { ContactDetailDrawer } from "@/shared/crm/contacts/contact-detail-drawer";
 import {
+  contactCountry,
   enrichContacts,
   filterEnrichedContacts,
   formatContactDate,
   hasContactFilters,
+  leadStatusLabel,
   resolveSendEmailTarget,
   sortEnrichedContacts,
   type ContactSort,
@@ -19,6 +21,7 @@ import type { SendEmailTarget } from "@/shared/crm/send-email/send-email-types";
 import { sendEmailTargetFromLead } from "@/shared/crm/send-email/send-email-types";
 import { useCrm } from "@/shared/crm/store/crm-context";
 import type { CrmLead } from "@/shared/crm/store/types";
+import { BottomSheet } from "@/shared/crm/ui/bottom-sheet";
 import { ConfirmDeleteOverlay } from "@/shared/crm/ui/confirm-delete-overlay";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
@@ -33,18 +36,37 @@ const STAT_CARDS = [
   { key: "activeLeads", label: "Active links", icon: "ri-pulse-line", tone: "warning" },
 ] as const;
 
+const SORT_LABELS: Record<ContactSort, string> = {
+  name: "Name A–Z",
+  company: "Company",
+  newest: "Newest first",
+};
+
+const dash = (v: string | null | undefined) => (v?.trim() ? v : "—");
+
 export default function ContactsPage() {
   const { contacts, companies, leads, hydrated, deleteContact } = useCrm();
   const [search, setSearch] = useState("");
   const [companyFilter, setCompanyFilter] = useState("");
   const [sort, setSort] = useState<ContactSort>("name");
   const [page, setPage] = useState(1);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<EnrichedContact | null>(null);
   const [selectedLead, setSelectedLead] = useState<CrmLead | null>(null);
   const [sendTarget, setSendTarget] = useState<SendEmailTarget | null>(null);
   const [pendingDelete, setPendingDelete] = useState<EnrichedContact | null>(
     null
   );
+  // Gate overlays so BottomSheet body-lock and the side drawer never fight.
+  const [viewport, setViewport] = useState<"mobile" | "desktop" | null>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767.98px)");
+    const apply = () => setViewport(mq.matches ? "mobile" : "desktop");
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   const enriched = useMemo(
     () => enrichContacts(contacts, companies, leads),
@@ -77,6 +99,13 @@ export default function ContactsPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const filtersActive = hasContactFilters(search, companyFilter);
+  const companyName =
+    companyOptions.find((c) => c.id === companyFilter)?.name ?? "";
+  const sheetChips = [
+    companyFilter && `Company: ${companyName || "Selected"}`,
+    sort !== "name" && `Sort: ${SORT_LABELS[sort]}`,
+  ].filter(Boolean) as string[];
+  const sheetFilterCount = sheetChips.length;
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -100,6 +129,11 @@ export default function ContactsPage() {
   const clearFilters = () => {
     setSearch("");
     setCompanyFilter("");
+  };
+
+  const resetSheetFilters = () => {
+    setCompanyFilter("");
+    setSort("name");
   };
 
   const openRow = (row: EnrichedContact) => setSelectedRow(row);
@@ -167,70 +201,136 @@ export default function ContactsPage() {
           </div>
 
           <div className="saved-contacts-toolbar">
-            <div className="saved-contacts-toolbar-top">
-              <span className="saved-contacts-count">
-                <strong>{filtered.length}</strong>
-                <span className="text-textmuted">
-                  {" "}
-                  of {contacts.length} contacts
+            {/* Mobile: search stays; Company + Sort live in Filters/Sort sheet. */}
+            <div className="md:hidden">
+              <div className="flex items-center justify-between gap-2 mb-2 text-[0.75rem] text-textmuted">
+                <span className="saved-contacts-count">
+                  <strong className="text-defaulttextcolor">
+                    {filtered.length}
+                  </strong>
+                  {" of "}
+                  {contacts.length} contacts
                 </span>
-              </span>
-              {filtersActive && (
-                <button
-                  type="button"
-                  className="ti-btn ti-btn-sm ti-btn-light"
-                  onClick={clearFilters}
-                >
-                  <i className="ri-filter-off-line me-1"></i>
-                  Clear filters
-                </button>
-              )}
-            </div>
-            <div className="saved-contacts-filters">
-              <div className="saved-contacts-filter saved-contacts-filter--search">
-                <label className="saved-contacts-filter-label">Search</label>
-                <div className="input-group input-group-sm">
-                  <span className="input-group-text saved-contacts-input-addon">
-                    <i className="ri-search-line"></i>
-                  </span>
+                {(filtersActive || sort !== "name") && (
+                  <button
+                    type="button"
+                    className="text-primary font-medium"
+                    onClick={() => {
+                      clearFilters();
+                      setSort("name");
+                    }}
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <div className="relative flex-1 min-w-0">
+                  <i
+                    className="ri-search-line absolute start-3 top-1/2 -translate-y-1/2 text-textmuted pointer-events-none"
+                    aria-hidden="true"
+                  />
                   <input
                     type="search"
-                    className="form-control saved-contacts-input"
+                    className="form-control saved-contacts-input !ps-9 !min-h-[2.75rem]"
                     placeholder="Name, email, role, company…"
+                    aria-label="Search contacts"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    aria-label="Search contacts"
                   />
                 </div>
-              </div>
-              <div className="saved-contacts-filter">
-                <label className="saved-contacts-filter-label">Company</label>
-                <select
-                  className="form-select form-select-sm saved-contacts-input"
-                  value={companyFilter}
-                  onChange={(e) => setCompanyFilter(e.target.value)}
-                  aria-label="Filter by company"
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-light shrink-0 !mb-0 !min-h-[2.75rem]"
+                  onClick={() => setFiltersOpen(true)}
                 >
-                  <option value="">All companies</option>
-                  {companyOptions.map((co) => (
-                    <option key={co.id} value={co.id}>
-                      {co.name}
-                    </option>
+                  <i className="ri-equalizer-line me-1" aria-hidden="true" />
+                  Filters
+                  {sheetFilterCount > 0 && (
+                    <span className="badge bg-primary text-white ms-1">
+                      {sheetFilterCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+              {sheetChips.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  {sheetChips.map((chip) => (
+                    <span key={chip} className="badge bg-light text-default">
+                      {chip}
+                    </span>
                   ))}
-                </select>
+                </div>
+              )}
+            </div>
+
+            {/* Desktop toolbar — unchanged. Wrapper carries the breakpoint. */}
+            <div className="hidden md:block">
+              <div className="saved-contacts-toolbar-top">
+                <span className="saved-contacts-count">
+                  <strong>{filtered.length}</strong>
+                  <span className="text-textmuted">
+                    {" "}
+                    of {contacts.length} contacts
+                  </span>
+                </span>
+                {filtersActive && (
+                  <button
+                    type="button"
+                    className="ti-btn ti-btn-sm ti-btn-light"
+                    onClick={clearFilters}
+                  >
+                    <i className="ri-filter-off-line me-1"></i>
+                    Clear filters
+                  </button>
+                )}
               </div>
-              <div className="saved-contacts-filter saved-contacts-filter--sort">
-                <label className="saved-contacts-filter-label">Sort</label>
-                <select
-                  className="form-select form-select-sm saved-contacts-input"
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as ContactSort)}
-                  aria-label="Sort contacts"
-                >
-                  <option value="name">Name A–Z</option>
-                  <option value="company">Company</option>
-                  <option value="newest">Newest first</option>
-                </select>
+              <div className="saved-contacts-filters">
+                <div className="saved-contacts-filter saved-contacts-filter--search">
+                  <label className="saved-contacts-filter-label">Search</label>
+                  <div className="input-group input-group-sm">
+                    <span className="input-group-text saved-contacts-input-addon">
+                      <i className="ri-search-line"></i>
+                    </span>
+                    <input
+                      type="search"
+                      className="form-control saved-contacts-input"
+                      placeholder="Name, email, role, company…"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      aria-label="Search contacts"
+                    />
+                  </div>
+                </div>
+                <div className="saved-contacts-filter">
+                  <label className="saved-contacts-filter-label">Company</label>
+                  <select
+                    className="form-select form-select-sm saved-contacts-input"
+                    value={companyFilter}
+                    onChange={(e) => setCompanyFilter(e.target.value)}
+                    aria-label="Filter by company"
+                  >
+                    <option value="">All companies</option>
+                    {companyOptions.map((co) => (
+                      <option key={co.id} value={co.id}>
+                        {co.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="saved-contacts-filter saved-contacts-filter--sort">
+                  <label className="saved-contacts-filter-label">Sort</label>
+                  <select
+                    className="form-select form-select-sm saved-contacts-input"
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value as ContactSort)}
+                    aria-label="Sort contacts"
+                  >
+                    <option value="name">Name A–Z</option>
+                    <option value="company">Company</option>
+                    <option value="newest">Newest first</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
@@ -262,7 +362,10 @@ export default function ContactsPage() {
                 <button
                   type="button"
                   className="ti-btn ti-btn-primary saved-contacts-empty-cta"
-                  onClick={clearFilters}
+                  onClick={() => {
+                    clearFilters();
+                    setSort("name");
+                  }}
                 >
                   <i className="ri-filter-off-line me-1"></i>
                   Clear filters
@@ -271,140 +374,238 @@ export default function ContactsPage() {
             </div>
           ) : (
             <>
-              <div className="table-responsive saved-contacts-table-wrap">
-                <table className="table table-hover ti-custom-table saved-contacts-table mb-0">
-                  <thead>
-                    <tr>
-                      <th scope="col" className="saved-contacts-th-avatar"></th>
-                      <th scope="col">Contact</th>
-                      <th scope="col">Company</th>
-                      <th scope="col">Leads</th>
-                      <th scope="col">Saved</th>
-                      <th scope="col" className="text-end">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginated.map((row) => {
-                      const { contact, company } = row;
-                      const isSelected =
-                        selectedRow?.contact.id === contact.id;
-                      return (
-                        <tr
-                          key={contact.id}
-                          className={`saved-contacts-row ${isSelected ? "is-selected" : ""}`}
-                          onClick={() => openRow(row)}
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              openRow(row);
-                            }
-                          }}
+              {/* Mobile: one card per contact. Tap opens details sheet. */}
+              <div className="md:hidden saved-contacts-cards">
+                {paginated.map((row) => {
+                  const { contact, company } = row;
+                  return (
+                    <div
+                      key={contact.id}
+                      className="saved-contacts-card"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Open ${contact.name}`}
+                      onClick={() => openRow(row)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openRow(row);
+                        }
+                      }}
+                    >
+                      <div className="saved-contacts-card-head">
+                        <InboxAvatar name={contact.name} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="saved-contacts-card-name">
+                            {contact.name}
+                          </p>
+                          <p className="saved-contacts-card-role">
+                            {dash(contact.role)}
+                          </p>
+                        </div>
+                        <span
+                          className={`badge saved-contacts-card-lead ${
+                            row.leadCount > 0 ? "has-leads" : ""
+                          }`}
                         >
-                          <td className="saved-contacts-td-avatar">
-                            <InboxAvatar name={contact.name} size="sm" />
-                          </td>
-                          <td>
-                            <p className="saved-contacts-name mb-0">
-                              {contact.name}
-                            </p>
-                            <p className="saved-contacts-meta mb-0">
-                              {contact.role}
-                            </p>
-                            <a
-                              href={`mailto:${contact.email}`}
-                              className="saved-contacts-email"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {contact.email}
-                            </a>
-                          </td>
-                          <td>
-                            {company ? (
-                              <div className="saved-contacts-company-block">
-                                <span
-                                  className="saved-contacts-co-badge"
-                                  title={company.name}
-                                >
-                                  {companyInitials(company.name)}
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="saved-contacts-co-name mb-0">
-                                    {company.name}
-                                  </p>
-                                  <p className="saved-contacts-meta mb-0">
-                                    {company.location}
-                                  </p>
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="saved-contacts-meta">—</span>
-                            )}
-                          </td>
-                          <td>
-                            {row.leadCount > 0 ? (
-                              <Link
-                                href={`/active-leads?company=${contact.companyId}`}
-                                className="badge saved-contacts-lead-badge"
+                          {leadStatusLabel(row)}
+                        </span>
+                      </div>
+
+                      <p className="saved-contacts-card-email">
+                        {dash(contact.email)}
+                      </p>
+                      <p className="saved-contacts-card-company">
+                        <i
+                          className="ri-building-2-line shrink-0"
+                          aria-hidden="true"
+                        />
+                        <span className="truncate">
+                          {dash(company?.name)}
+                          {" · "}
+                          {contactCountry(company)}
+                        </span>
+                      </p>
+
+                      <div className="saved-contacts-card-foot">
+                        <span className="saved-contacts-card-date">
+                          Saved {formatContactDate(contact.createdAt)}
+                        </span>
+                        <div
+                          className="saved-contacts-card-actions"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Link
+                            href={
+                              contact.email
+                                ? `/inbox?compose=${encodeURIComponent(contact.email)}`
+                                : "/inbox"
+                            }
+                            className="saved-contacts-icon-btn"
+                            title="Email"
+                            aria-label={`Email ${contact.name}`}
+                          >
+                            <i className="ri-mail-line"></i>
+                          </Link>
+                          <button
+                            type="button"
+                            className="saved-contacts-icon-btn saved-contacts-icon-btn--danger"
+                            title="Delete"
+                            aria-label={`Delete ${contact.name}`}
+                            onClick={() => requestDelete(row)}
+                          >
+                            <i className="ri-delete-bin-line"></i>
+                          </button>
+                          <span className="saved-contacts-card-view">
+                            Details
+                            <i
+                              className="ri-arrow-right-line ms-0.5"
+                              aria-hidden="true"
+                            />
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden md:block">
+                <div className="table-responsive saved-contacts-table-wrap">
+                  <table className="table table-hover ti-custom-table saved-contacts-table mb-0">
+                    <thead>
+                      <tr>
+                        <th scope="col" className="saved-contacts-th-avatar"></th>
+                        <th scope="col">Contact</th>
+                        <th scope="col">Company</th>
+                        <th scope="col">Leads</th>
+                        <th scope="col">Saved</th>
+                        <th scope="col" className="text-end">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginated.map((row) => {
+                        const { contact, company } = row;
+                        const isSelected =
+                          selectedRow?.contact.id === contact.id;
+                        return (
+                          <tr
+                            key={contact.id}
+                            className={`saved-contacts-row ${isSelected ? "is-selected" : ""}`}
+                            onClick={() => openRow(row)}
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openRow(row);
+                              }
+                            }}
+                          >
+                            <td className="saved-contacts-td-avatar">
+                              <InboxAvatar name={contact.name} size="sm" />
+                            </td>
+                            <td>
+                              <p className="saved-contacts-name mb-0">
+                                {contact.name}
+                              </p>
+                              <p className="saved-contacts-meta mb-0">
+                                {contact.role}
+                              </p>
+                              <a
+                                href={`mailto:${contact.email}`}
+                                className="saved-contacts-email"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {row.leadCount} lead
-                                {row.leadCount !== 1 ? "s" : ""}
-                                {row.activeLeadCount > 0
-                                  ? ` · ${row.activeLeadCount} active`
-                                  : ""}
-                              </Link>
-                            ) : (
-                              <span className="saved-contacts-meta">—</span>
-                            )}
-                          </td>
-                          <td className="saved-contacts-date">
-                            {formatContactDate(contact.createdAt)}
-                          </td>
-                          <td className="text-end">
-                            <div
-                              className="saved-contacts-row-actions"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Link
-                                href={
-                                  contact.email
-                                    ? `/inbox?compose=${encodeURIComponent(contact.email)}`
-                                    : "/inbox"
-                                }
-                                className="saved-contacts-icon-btn"
-                                title="Email"
-                                aria-label={`Email ${contact.name}`}
+                                {contact.email}
+                              </a>
+                            </td>
+                            <td>
+                              {company ? (
+                                <div className="saved-contacts-company-block">
+                                  <span
+                                    className="saved-contacts-co-badge"
+                                    title={company.name}
+                                  >
+                                    {companyInitials(company.name)}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="saved-contacts-co-name mb-0">
+                                      {company.name}
+                                    </p>
+                                    <p className="saved-contacts-meta mb-0">
+                                      {company.location}
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="saved-contacts-meta">—</span>
+                              )}
+                            </td>
+                            <td>
+                              {row.leadCount > 0 ? (
+                                <Link
+                                  href={`/active-leads?company=${contact.companyId}`}
+                                  className="badge saved-contacts-lead-badge"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {row.leadCount} lead
+                                  {row.leadCount !== 1 ? "s" : ""}
+                                  {row.activeLeadCount > 0
+                                    ? ` · ${row.activeLeadCount} active`
+                                    : ""}
+                                </Link>
+                              ) : (
+                                <span className="saved-contacts-meta">—</span>
+                              )}
+                            </td>
+                            <td className="saved-contacts-date">
+                              {formatContactDate(contact.createdAt)}
+                            </td>
+                            <td className="text-end">
+                              <div
+                                className="saved-contacts-row-actions"
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                <i className="ri-mail-line"></i>
-                              </Link>
-                              <button
-                                type="button"
-                                className="saved-contacts-icon-btn"
-                                title="Details"
-                                aria-label={`View ${contact.name}`}
-                                onClick={() => openRow(row)}
-                              >
-                                <i className="ri-arrow-right-s-line"></i>
-                              </button>
-                              <button
-                                type="button"
-                                className="saved-contacts-icon-btn saved-contacts-icon-btn--danger"
-                                title="Delete"
-                                aria-label={`Delete ${contact.name}`}
-                                onClick={() => requestDelete(row)}
-                              >
-                                <i className="ri-delete-bin-line"></i>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                                <Link
+                                  href={
+                                    contact.email
+                                      ? `/inbox?compose=${encodeURIComponent(contact.email)}`
+                                      : "/inbox"
+                                  }
+                                  className="saved-contacts-icon-btn"
+                                  title="Email"
+                                  aria-label={`Email ${contact.name}`}
+                                >
+                                  <i className="ri-mail-line"></i>
+                                </Link>
+                                <button
+                                  type="button"
+                                  className="saved-contacts-icon-btn"
+                                  title="Details"
+                                  aria-label={`View ${contact.name}`}
+                                  onClick={() => openRow(row)}
+                                >
+                                  <i className="ri-arrow-right-s-line"></i>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="saved-contacts-icon-btn saved-contacts-icon-btn--danger"
+                                  title="Delete"
+                                  aria-label={`Delete ${contact.name}`}
+                                  onClick={() => requestDelete(row)}
+                                >
+                                  <i className="ri-delete-bin-line"></i>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {totalPages > 1 && (
@@ -460,16 +661,150 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      <ContactDetailDrawer
-        row={selectedRow}
-        onClose={() => setSelectedRow(null)}
-        onDelete={(row) => requestDelete(row)}
-        onSendEmail={(row) => setSendTarget(resolveSendEmailTarget(row))}
-        onSelectLead={(lead) => {
-          setSelectedRow(null);
-          setSelectedLead(lead);
-        }}
-      />
+      {filtersOpen && (
+        <BottomSheet
+          title="Filters / Sort"
+          onClose={() => setFiltersOpen(false)}
+        >
+          <div className="box-body space-y-3">
+            <div>
+              <label
+                className="saved-contacts-filter-label"
+                htmlFor="sc-sheet-company"
+              >
+                Company
+              </label>
+              <select
+                id="sc-sheet-company"
+                className="form-select !min-h-[2.75rem] saved-contacts-input"
+                value={companyFilter}
+                onChange={(e) => setCompanyFilter(e.target.value)}
+              >
+                <option value="">All companies</option>
+                {companyOptions.map((co) => (
+                  <option key={co.id} value={co.id}>
+                    {co.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                className="saved-contacts-filter-label"
+                htmlFor="sc-sheet-sort"
+              >
+                Sort
+              </label>
+              <select
+                id="sc-sheet-sort"
+                className="form-select !min-h-[2.75rem] saved-contacts-input"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as ContactSort)}
+              >
+                <option value="name">Name A–Z</option>
+                <option value="company">Company</option>
+                <option value="newest">Newest first</option>
+              </select>
+            </div>
+          </div>
+          <div className="box-footer flex gap-2">
+            <button
+              type="button"
+              className="ti-btn ti-btn-light flex-1 !mb-0"
+              onClick={resetSheetFilters}
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              className="ti-btn ti-btn-primary flex-1 !mb-0"
+              onClick={() => setFiltersOpen(false)}
+            >
+              Show {filtered.length}{" "}
+              {filtered.length === 1 ? "contact" : "contacts"}
+            </button>
+          </div>
+        </BottomSheet>
+      )}
+
+      {selectedRow && viewport === "mobile" && (
+        <BottomSheet
+          title={selectedRow.contact.name}
+          onClose={() => setSelectedRow(null)}
+        >
+          <div className="box-body">
+            <p className="text-[0.8125rem] text-textmuted mb-1">
+              {dash(selectedRow.contact.role)}
+            </p>
+            <p className="text-[0.8125rem] mb-4">
+              {dash(selectedRow.company?.name)}
+              {" · "}
+              {contactCountry(selectedRow.company)}
+            </p>
+            <dl className="mb-0 divide-y divide-defaultborder dark:divide-white/10">
+              <DetailRow label="Email" value={dash(selectedRow.contact.email)} />
+              <DetailRow
+                label="Phone"
+                value={dash(selectedRow.contact.phone)}
+              />
+              <DetailRow label="Leads" value={leadStatusLabel(selectedRow)} />
+              <DetailRow
+                label="Saved"
+                value={formatContactDate(selectedRow.contact.createdAt)}
+              />
+            </dl>
+          </div>
+          <div className="box-footer flex flex-col gap-2">
+            <button
+              type="button"
+              className="ti-btn ti-btn-primary w-full !mb-0"
+              onClick={() => {
+                setSendTarget(resolveSendEmailTarget(selectedRow));
+                setSelectedRow(null);
+              }}
+            >
+              <i className="ri-mail-send-line me-1" aria-hidden="true" />
+              Send email
+            </button>
+            <div className="flex gap-2">
+              {selectedRow.leadCount > 0 ? (
+                <Link
+                  href={`/active-leads?company=${selectedRow.contact.companyId}`}
+                  className="ti-btn ti-btn-light flex-1 !mb-0 text-center"
+                  onClick={() => setSelectedRow(null)}
+                >
+                  <i className="ri-focus-3-line me-1" aria-hidden="true" />
+                  View leads
+                </Link>
+              ) : null}
+              <button
+                type="button"
+                className="ti-btn ti-btn-outline-danger flex-1 !mb-0"
+                onClick={() => {
+                  requestDelete(selectedRow);
+                  setSelectedRow(null);
+                }}
+              >
+                <i className="ri-delete-bin-line me-1" aria-hidden="true" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </BottomSheet>
+      )}
+
+      {viewport === "desktop" && (
+        <ContactDetailDrawer
+          row={selectedRow}
+          onClose={() => setSelectedRow(null)}
+          onDelete={(row) => requestDelete(row)}
+          onSendEmail={(row) => setSendTarget(resolveSendEmailTarget(row))}
+          onSelectLead={(lead) => {
+            setSelectedRow(null);
+            setSelectedLead(lead);
+          }}
+        />
+      )}
 
       <ActiveLeadDetailDrawer
         lead={selectedLead}
@@ -493,5 +828,14 @@ export default function ContactsPage() {
         onCancel={cancelDelete}
       />
     </Fragment>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2.5">
+      <dt className="text-[0.75rem] text-textmuted shrink-0">{label}</dt>
+      <dd className="mb-0 text-end text-[0.8125rem]">{value}</dd>
+    </div>
   );
 }
