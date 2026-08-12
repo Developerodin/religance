@@ -287,8 +287,8 @@ export default function ActiveLeadsBoard() {
 
       <div className="box custom-box active-leads-main !mb-0">
         <div className="active-leads-toolbar">
-          {/* Mobile toolbar: tabs, search, and one Filters entry point. */}
-          <div className="md:hidden">
+          {/* Phone + tablet: tabs, search, Filters sheet. Desktop keeps inline filters. */}
+          <div className="xl:hidden">
             <div
               className="active-leads-segmented is-fluid"
               role="group"
@@ -357,8 +357,8 @@ export default function ActiveLeadsBoard() {
             </div>
           </div>
 
-          {/* Desktop toolbar — unchanged. Wrapper carries the breakpoint. */}
-          <div className="hidden md:block">
+          {/* Desktop toolbar (xl+) — unchanged. Wrapper carries the breakpoint. */}
+          <div className="hidden xl:block">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
             <div className="active-leads-segmented" role="group" aria-label="Pipeline view">
               {PIPELINE_TABS.map((tab) => (
@@ -495,8 +495,8 @@ export default function ActiveLeadsBoard() {
           </div>
         </div>
 
-        {/* Mobile: one card per lead. Tap anywhere opens the lead. */}
-        <div className="md:hidden active-leads-cards">
+        {/* Phone + tablet cards only. Desktop table is xl+ — never both. */}
+        <div className="xl:hidden active-leads-cards">
           {paginatedLeads.length === 0 ? (
             <div className="active-leads-empty">
               <span className="avatar avatar-xl bg-primary/10 text-primary mb-3">
@@ -580,7 +580,7 @@ export default function ActiveLeadsBoard() {
           )}
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden xl:block">
         <div className="table-responsive active-leads-table">
           <table className="table table-hover ti-custom-table min-w-full mb-0 text-[0.8125rem]">
             <thead className="ti-custom-table-head">
@@ -734,8 +734,8 @@ export default function ActiveLeadsBoard() {
         </div>
 
         <div className="box-footer active-leads-footer !px-3 !py-2.5 border-t border-defaultborder dark:border-defaultborder/10">
-          {/* Mobile pager: two big targets, no numbered list to cram in. */}
-          <div className="md:hidden active-leads-pager-mobile">
+          {/* Phone + tablet pager: two big targets, no numbered list to cram in. */}
+          <div className="xl:hidden active-leads-pager-mobile">
             <button
               type="button"
               className="ti-btn ti-btn-light !mb-0 !min-h-[2.75rem]"
@@ -759,7 +759,7 @@ export default function ActiveLeadsBoard() {
             </button>
           </div>
 
-          <div className="hidden md:block">
+          <div className="hidden xl:block">
           <div className="lead-discovery-panel-footer min-h-[2rem]">
             <div className="flex items-center gap-2 justify-start min-w-0">
               <label className="flex items-center gap-1 mb-0 whitespace-nowrap shrink-0">
