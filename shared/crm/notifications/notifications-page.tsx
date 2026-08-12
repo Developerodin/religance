@@ -7,21 +7,38 @@ import Pageheader from "@/shared/layout-components/page-header/pageheader";
 import {
   deleteNotification,
   getNotifications,
+  type NotificationCategory,
   type NotificationItem,
 } from "./notifications-api";
+import { triggerNotificationRefresh } from "./notification-context";
 import { formatNotificationTime } from "./notification-time";
 
 const PAGE_LIMIT = 50;
 
+type Tab = "all" | NotificationCategory;
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "action", label: "Action items" },
+  { id: "activity", label: "Activity" },
+];
+
+const iconColorForCategory = (category: NotificationCategory) =>
+  category === "action"
+    ? { bg: "!bg-primary/10", text: "text-primary" }
+    : { bg: "!bg-secondary/10", text: "text-secondary" };
+
 export default function NotificationsPage() {
   const router = useRouter();
   const [items, setItems] = useState<NotificationItem[]>([]);
+  const [tab, setTab] = useState<Tab>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const res = await getNotifications({ category: "activity", limit: PAGE_LIMIT });
+    // Same unfiltered list as the header bell (actions + activity).
+    const res = await getNotifications({ limit: PAGE_LIMIT });
     if (!res.live) {
       setError(res.error);
       setItems([]);
@@ -36,6 +53,10 @@ export default function NotificationsPage() {
     void refresh();
   }, [refresh]);
 
+  const visible = tab === "all" ? items : items.filter((n) => n.category === tab);
+  const actionCount = items.filter((n) => n.category === "action").length;
+  const activityCount = items.length - actionCount;
+
   const onOpen = async (item: NotificationItem) => {
     const res = await deleteNotification(item.id, "navigate");
     if (!res.live) {
@@ -43,6 +64,7 @@ export default function NotificationsPage() {
       return;
     }
     setItems((prev) => prev.filter((n) => n.id !== item.id));
+    triggerNotificationRefresh();
     router.push(item.href);
   };
 
@@ -53,7 +75,15 @@ export default function NotificationsPage() {
       return;
     }
     setItems((prev) => prev.filter((n) => n.id !== id));
+    triggerNotificationRefresh();
   };
+
+  const emptyTitle =
+    tab === "action"
+      ? "No action items"
+      : tab === "activity"
+        ? "No activity notifications"
+        : "No notifications";
 
   return (
     <Fragment>
@@ -65,15 +95,44 @@ export default function NotificationsPage() {
       />
       <div className="box custom-box">
         <div className="box-header justify-between">
-          <h5 className="box-title mb-0 before:!hidden">Activity</h5>
+          <h5 className="box-title mb-0 before:!hidden">Notifications</h5>
           {!loading && !error ? (
             <span className="badge bg-secondary/10 text-secondary">
-              {items.length} item{items.length === 1 ? "" : "s"}
+              {visible.length} item{visible.length === 1 ? "" : "s"}
             </span>
           ) : null}
         </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
+          <nav className="flex gap-1" aria-label="Notification categories">
+            {TABS.map((t) => {
+              const count =
+                t.id === "all"
+                  ? items.length
+                  : t.id === "action"
+                    ? actionCount
+                    : activityCount;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={`px-3 py-1.5 text-[0.75rem] font-medium rounded-md whitespace-nowrap ${
+                    tab === t.id
+                      ? "bg-primary/10 text-primary"
+                      : "text-textmuted hover:text-primary"
+                  }`}
+                >
+                  {t.label}
+                  {!loading && !error ? (
+                    <span className="ms-1 opacity-70">({count})</span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
         <p className="mb-0 px-4 pt-2 text-[0.8125rem] text-textmuted">
-          Pipeline activity events. Action items appear in the header bell.
+          Action items and pipeline activity — the same list as the header bell.
         </p>
         <div className="box-body !pt-3">
           {loading ? (
@@ -84,7 +143,7 @@ export default function NotificationsPage() {
             <p className="mb-0 py-8 text-center text-[0.8125rem] text-danger" role="alert">
               {error}
             </p>
-          ) : items.length === 0 ? (
+          ) : visible.length === 0 ? (
             <div className="px-6 py-10 text-center">
               <span
                 className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-secondary/10 text-[1.5rem] text-secondary"
@@ -93,7 +152,7 @@ export default function NotificationsPage() {
                 <i className="ti ti-bell-off" />
               </span>
               <p className="mb-1 mt-3 text-[0.9375rem] font-semibold text-defaulttextcolor dark:text-white">
-                No activity notifications
+                {emptyTitle}
               </p>
               <p className="mb-0 text-[0.8125rem] text-textmuted dark:text-white/50">
                 You&apos;re all caught up.
@@ -101,12 +160,13 @@ export default function NotificationsPage() {
             </div>
           ) : (
             <ul className="list-none !m-0 !p-0 divide-y divide-defaultborder dark:divide-white/10">
-              {items.map((item) => {
+              {visible.map((item) => {
+                const colors = iconColorForCategory(item.category);
                 const received = formatNotificationTime(item.createdAt);
                 return (
                   <li key={item.id} className="flex items-start gap-3 px-1 py-3">
                     <span
-                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full !bg-secondary/10 text-[1.125rem] text-secondary"
+                      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[1.125rem] ${colors.bg} ${colors.text}`}
                       aria-hidden="true"
                     >
                       <i className={`ti ti-${item.icon}`} />
