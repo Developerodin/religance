@@ -30,7 +30,6 @@ const Header = () => {
   const {
     items: notifications,
     total,
-    activityTotal,
     loading,
     markingAllAsRead,
     error,
@@ -386,15 +385,9 @@ const Header = () => {
                   </ul>
 
                   <div className={`border-t border-defaultborder p-4 dark:border-white/10 empty-header-item1 ${notifications.length === 0 ? "hidden" : "block"}`}>
-                    {activityTotal > 0 ? (
-                      <Link href="/notifications/" className="ti-btn ti-btn-primary-full !m-0 w-full p-2">
-                        View all
-                      </Link>
-                    ) : total > 0 ? (
-                      <p className="mb-0 text-center text-[0.75rem] text-textmuted dark:text-white/50">
-                        Action items above
-                      </p>
-                    ) : null}
+                    <Link href="/notifications/" className="ti-btn ti-btn-primary-full !m-0 w-full p-2">
+                      View all
+                    </Link>
                   </div>
                   <div className={`px-6 py-10 text-center empty-item1 ${total === 0 ? "block" : "hidden"}`}>
                     <span className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-secondary/10 text-[1.5rem] text-secondary" aria-hidden="true">
