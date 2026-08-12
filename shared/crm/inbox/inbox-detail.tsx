@@ -98,6 +98,8 @@ export function InboxDetailPanel({
   suggestedCompany,
   onLinkLead,
   onUnlinkLead,
+  onBack,
+  backLabel = "Inbox",
 }: {
   active: CrmEmail;
   meta: InboxRowMeta & { lead?: CrmLead };
@@ -135,6 +137,9 @@ export function InboxDetailPanel({
   suggestedCompany: CrmCompany | null | undefined;
   onLinkLead: (leadId: string) => void;
   onUnlinkLead: () => void;
+  /** Mobile drill-down back control. */
+  onBack?: () => void;
+  backLabel?: string;
 }) {
   const [pendingLinkLeadId, setPendingLinkLeadId] = useState<string | null>(
     null
@@ -248,12 +253,31 @@ export function InboxDetailPanel({
 
   return (
     <section className="crm-inbox-detail">
+      {onBack ? (
+        <div className="crm-inbox-detail-back-bar">
+          <button
+            type="button"
+            className="crm-inbox-detail-back"
+            onClick={onBack}
+          >
+            <i className="ri-arrow-left-line" aria-hidden />
+            {backLabel}
+          </button>
+        </div>
+      ) : null}
       <div className="crm-inbox-detail-top">
         <div className="crm-inbox-detail-sender">
           <InboxAvatar name={meta.from} size="lg" />
-          <div>
+          <div className="min-w-0">
             <p className="crm-inbox-detail-from">{meta.from}</p>
             <p className="crm-inbox-detail-email">{meta.peer}</p>
+            <span
+              className={`crm-inbox-link-badge${
+                meta.lead ? " is-linked" : " is-unlinked"
+              }`}
+            >
+              {meta.lead ? "Linked" : "Unlinked"}
+            </span>
           </div>
         </div>
         <div className="crm-inbox-detail-actions">
@@ -403,7 +427,7 @@ export function InboxDetailPanel({
         )}
 
         {!active.leadId && outlookConnected && (
-          <div className="crm-inbox-link-banner">
+          <div className="crm-inbox-link-banner is-compact">
             <i className="ri-link-unlink-m"></i>
             <div>
               <strong>Link to a lead</strong>
@@ -412,7 +436,7 @@ export function InboxDetailPanel({
                   Suggested: {suggestedCompany.name} — {suggested.title}
                 </p>
               ) : (
-                <p>Track pipeline and follow-ups after linking.</p>
+                <p>Track pipeline after linking.</p>
               )}
               <div className="crm-inbox-link-banner-actions">
                 <select
@@ -799,7 +823,7 @@ export function InboxDetailEmpty() {
       <span className="crm-inbox-empty-icon">
         <i className="ri-mail-open-line"></i>
       </span>
-      <h3>Select a message</h3>
+      <h3>Select a message to read</h3>
       <p>Pick an email from the list to read and reply.</p>
     </div>
   );

@@ -1,5 +1,14 @@
 import type { CrmContact, CrmEmail, CrmLead } from "@/shared/crm/store/types";
 
+export type InboxViewport = "mobile" | "tablet" | "desktop";
+
+/** Breakpoints match Tailwind screens: md=768, xl=1200. */
+export function inboxViewportFromWidth(width: number): InboxViewport {
+  if (width >= 1200) return "desktop";
+  if (width >= 768) return "tablet";
+  return "mobile";
+}
+
 export type InboxTag = "lead" | "unlinked" | "internal" | "finance";
 
 export const INBOX_TAG_COLORS: Record<InboxTag, string> = {

@@ -16,8 +16,10 @@ import {
 } from "./inbox-detail";
 import { INBOX_FOLDERS, INBOX_FOLDER_LABEL_IDS, type InboxFolderName } from "./inbox-constants";
 import { InboxListPanel } from "./inbox-list";
+import { InboxReadingDrawer } from "./inbox-reading-drawer";
 import { InboxSidebar } from "./inbox-sidebar";
 import { InboxSyncIndicator } from "./inbox-sync-indicator";
+import { BottomSheet } from "@/shared/crm/ui/bottom-sheet";
 import {
   getInboxTag,
   resolvePeerEmail,
@@ -25,7 +27,9 @@ import {
   resolveSenderName,
   suggestLeadForEmail,
   withTemplateContent,
+  inboxViewportFromWidth,
   type InboxTag,
+  type InboxViewport,
 } from "./inbox-utils";
 
 function splitRecipients(value: string): string[] {
@@ -180,6 +184,17 @@ export default function InboxPage() {
   );
   const [authError, setAuthError] = useState<string | null>(null);
   const [pendingEmailId, setPendingEmailId] = useState<string | null>(null);
+  // Exclusive layouts — never CSS-hide desktop+mobile twins (Contacts dual-render bug).
+  // desktop ≥1200 | tablet 768–1199 | mobile <768
+  const [viewport, setViewport] = useState<InboxViewport | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  useEffect(() => {
+    const apply = () => setViewport(inboxViewportFromWidth(window.innerWidth));
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, []);
 
   const getLead = useCallback(
     (leadId: string | null) =>
@@ -378,10 +393,17 @@ export default function InboxPage() {
       }
       return;
     }
-    if (!selectedId || !filtered.some((e) => e.id === selectedId)) {
-      setSelectedId(filtered[0].id);
+    // Desktop: keep reading pane filled. Tablet/mobile: no auto-open overlay/drill-down.
+    if (viewport === "desktop") {
+      if (!selectedId || !filtered.some((e) => e.id === selectedId)) {
+        setSelectedId(filtered[0].id);
+      }
+      return;
     }
-  }, [filtered, selectedId, pendingEmailId, setEmailFlag]);
+    if (selectedId && !filtered.some((e) => e.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [filtered, selectedId, pendingEmailId, setEmailFlag, viewport]);
 
   useEffect(() => {
     if (!sentFlash) return;
@@ -941,139 +963,263 @@ export default function InboxPage() {
     );
   }
 
-  return (
-    <Fragment>
-      <Seo title="Inbox" />
-      <div className="crm-inbox-page">
-        <div className="crm-inbox-shell box custom-box !mb-0">
-          <div className="box-body !p-0">
-            <div className="crm-inbox-layout">
-              <InboxSidebar
-                outlookConnected={outlookConnected}
-                accountEmail={outlookEmail ?? null}
-                accountDisplayName={activeOutlookAccount?.displayName ?? null}
-                onDisconnectOutlook={handleDisconnectOutlook}
-                onConnect={handleConnectOutlook}
-                onCompose={() => setComposeOpen(true)}
-                activeFolder={activeFolder}
-                onFolderChange={setActiveFolder}
-                folderCounts={folderCounts}
-                activeTag={activeTag}
-                onTagChange={setActiveTag}
-              />
+  const inboxUnreadCount = folderCounts.Inbox ?? null;
+  const listLoading =
+    Boolean(switchingAccountId) ||
+    (outlookInboxBootstrapping && basePool.length === 0);
 
-              <InboxListPanel
-                outlookConnected={outlookConnected}
-                onConnect={handleConnectOutlook}
-                activeFolder={activeFolder}
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-                emails={filtered}
-                rowMeta={rowMeta}
-                selectedId={selectedId}
-                onSelect={selectEmail}
-                starredIds={starredIds}
-                onToggleStar={toggleStar}
-                checkedIds={checkedIds}
-                onToggleCheck={toggleCheck}
-                onToggleCheckAll={toggleCheckAll}
-                allChecked={allChecked}
-                loading={
-                  Boolean(switchingAccountId) ||
-                  (outlookInboxBootstrapping && basePool.length === 0)
-                }
-                hasMore={showLoadMore}
-                loadingMore={loadingMoreInboxFolder === activeFolder}
-                onLoadMore={handleLoadMore}
-                syncing={outlookInboxSyncing}
-                syncError={outlookSyncError}
-                lastSyncedAt={outlookInboxLastSyncedAt}
-                onRefresh={handleRefreshInbox}
-                onBulkMarkRead={handleBulkMarkRead}
-                onBulkArchive={handleBulkArchive}
-                onBulkUnarchive={handleBulkUnarchive}
-                onBulkDelete={handleBulkDelete}
-              />
+  const renderDetail = (opts?: { onBack?: () => void; backLabel?: string }) => {
+    if (switchingAccountId) {
+      return (
+        <InboxDetailLoading
+          email={
+            (outlookAccounts ?? []).find((a) => a.id === switchingAccountId)
+              ?.email ?? null
+          }
+        />
+      );
+    }
+    if (active && activeMeta) {
+      return (
+        <InboxDetailPanel
+          active={active}
+          meta={activeMeta}
+          mailboxDisplayName={activeMailbox?.name ?? null}
+          outlookConnected={outlookConnected}
+          starred={starredIds.includes(active.id)}
+          onToggleStar={() =>
+            setEmailFlag(
+              active.id,
+              "starred",
+              !starredIds.includes(active.id)
+            )
+          }
+          onMarkUnread={() => setEmailFlag(active.id, "read", false)}
+          onArchive={handleArchiveActive}
+          onUnarchive={handleUnarchiveActive}
+          isArchived={
+            archivedIds.includes(active.id) ||
+            Boolean(active.mailboxLabels?.includes("ARCHIVE"))
+          }
+          isTrashed={
+            trashedIds.includes(active.id) ||
+            Boolean(active.mailboxLabels?.includes("TRASH"))
+          }
+          onDelete={() => {
+            setEmailFlag(active.id, "trashed", true);
+            setEmailFlag(active.id, "archived", false);
+            setSelectedId(null);
+          }}
+          replyText={replyText}
+          onReplyChange={setReplyText}
+          onSendReply={handleSendReply}
+          replyMode={replyMode}
+          onReplyModeChange={setReplyMode}
+          replyCc={replyCc}
+          onReplyCcChange={setReplyCc}
+          replyBcc={replyBcc}
+          onReplyBccChange={setReplyBcc}
+          replyAttachments={replyAttachments}
+          onReplyAttachmentsChange={setReplyAttachments}
+          forwardTo={forwardTo}
+          onForwardToChange={setForwardTo}
+          onDownloadAttachment={handleDownloadAttachment}
+          sending={sending}
+          sentFlash={sentFlash}
+          sendError={sendError}
+          hydratingBody={active.bodyLoaded === false}
+          leads={leads}
+          companies={companies}
+          suggested={suggested}
+          suggestedCompany={suggestedCompany}
+          onLinkLead={(leadId) => linkEmailToLead(active.id, leadId)}
+          onUnlinkLead={() => unlinkEmailFromLead(active.id)}
+          onBack={opts?.onBack}
+          backLabel={opts?.backLabel}
+        />
+      );
+    }
+    return <InboxDetailEmpty />;
+  };
 
-              {switchingAccountId ? (
-                <InboxDetailLoading
-                  email={
-                    (outlookAccounts ?? []).find(
-                      (a) => a.id === switchingAccountId
-                    )?.email ?? null
-                  }
-                />
-              ) : active && activeMeta ? (
-                <InboxDetailPanel
-                  active={active}
-                  meta={activeMeta}
-                  mailboxDisplayName={activeMailbox?.name ?? null}
-                  outlookConnected={outlookConnected}
-                  starred={starredIds.includes(active.id)}
-                  onToggleStar={() =>
-                    setEmailFlag(
-                      active.id,
-                      "starred",
-                      !starredIds.includes(active.id)
-                    )
-                  }
-                  onMarkUnread={() => setEmailFlag(active.id, "read", false)}
-                  onArchive={handleArchiveActive}
-                  onUnarchive={handleUnarchiveActive}
-                  isArchived={
-                    archivedIds.includes(active.id) ||
-                    Boolean(active.mailboxLabels?.includes("ARCHIVE"))
-                  }
-                  isTrashed={
-                    trashedIds.includes(active.id) ||
-                    Boolean(active.mailboxLabels?.includes("TRASH"))
-                  }
-                  onDelete={() => {
-                    setEmailFlag(active.id, "trashed", true);
-                    setEmailFlag(active.id, "archived", false);
-                    setSelectedId(null);
-                  }}
-                  replyText={replyText}
-                  onReplyChange={setReplyText}
-                  onSendReply={handleSendReply}
-                  replyMode={replyMode}
-                  onReplyModeChange={setReplyMode}
-                  replyCc={replyCc}
-                  onReplyCcChange={setReplyCc}
-                  replyBcc={replyBcc}
-                  onReplyBccChange={setReplyBcc}
-                  replyAttachments={replyAttachments}
-                  onReplyAttachmentsChange={setReplyAttachments}
-                  forwardTo={forwardTo}
-                  onForwardToChange={setForwardTo}
-                  onDownloadAttachment={handleDownloadAttachment}
-                  sending={sending}
-                  sentFlash={sentFlash}
-                  sendError={sendError}
-                  hydratingBody={active.bodyLoaded === false}
-                  leads={leads}
-                  companies={companies}
-                  suggested={suggested}
-                  suggestedCompany={suggestedCompany}
-                  onLinkLead={(leadId) => linkEmailToLead(active.id, leadId)}
-                  onUnlinkLead={() => unlinkEmailFromLead(active.id)}
-                />
-              ) : (
-                <InboxDetailEmpty />
-              )}
+  const listProps = {
+    outlookConnected,
+    onConnect: handleConnectOutlook,
+    activeFolder,
+    searchQuery,
+    onSearchChange: setSearchQuery,
+    emails: filtered,
+    rowMeta,
+    selectedId,
+    onSelect: selectEmail,
+    starredIds,
+    onToggleStar: toggleStar,
+    checkedIds,
+    onToggleCheck: toggleCheck,
+    onToggleCheckAll: toggleCheckAll,
+    allChecked,
+    loading: listLoading,
+    hasMore: showLoadMore,
+    loadingMore: loadingMoreInboxFolder === activeFolder,
+    onLoadMore: handleLoadMore,
+    syncing: outlookInboxSyncing,
+    syncError: outlookSyncError,
+    lastSyncedAt: outlookInboxLastSyncedAt,
+    onRefresh: handleRefreshInbox,
+    onBulkMarkRead: handleBulkMarkRead,
+    onBulkArchive: handleBulkArchive,
+    onBulkUnarchive: handleBulkUnarchive,
+    onBulkDelete: handleBulkDelete,
+    unreadCount: inboxUnreadCount,
+  } as const;
 
-              <InboxContactsRail
-                accounts={outlookAccounts ?? []}
-                activeAccountId={outlookAccountId ?? null}
-                onSwitchAccount={handleSwitchOutlookAccount}
-                onConnectAccount={handleConnectOutlook}
-                connecting={connectingOutlook}
-                switchingAccountId={switchingAccountId}
-              />
+  const sidebarProps = {
+    outlookConnected,
+    accountEmail: outlookEmail ?? null,
+    accountDisplayName: activeOutlookAccount?.displayName ?? null,
+    onDisconnectOutlook: handleDisconnectOutlook,
+    onConnect: handleConnectOutlook,
+    onCompose: () => setComposeOpen(true),
+    activeFolder,
+    onFolderChange: (folder: InboxFolderName) => {
+      setActiveFolder(folder);
+      setFiltersOpen(false);
+    },
+    folderCounts,
+    activeTag,
+    onTagChange: (tag: typeof activeTag) => {
+      setActiveTag(tag);
+      setFiltersOpen(false);
+    },
+  };
+
+  // Wait for matchMedia so we never mount desktop+mobile twins.
+  if (!viewport) {
+    return (
+      <Fragment>
+        <Seo title="Inbox" />
+        <div className="crm-inbox-page">
+          <div className="crm-inbox-shell box custom-box !mb-0">
+            <div className="box-body !p-4">
+              <InboxListSkeletonPlaceholder />
             </div>
           </div>
         </div>
+      </Fragment>
+    );
+  }
+
+  return (
+    <Fragment>
+      <Seo title="Inbox" />
+      <div className={`crm-inbox-page is-${viewport}`}>
+        <div className="crm-inbox-shell box custom-box !mb-0">
+          <div className="box-body !p-0">
+            {viewport === "desktop" ? (
+              <div className="crm-inbox-layout crm-inbox-layout--desktop">
+                <InboxSidebar {...sidebarProps} />
+                <InboxListPanel {...listProps} variant="rows" />
+                {renderDetail()}
+                <InboxContactsRail
+                  accounts={outlookAccounts ?? []}
+                  activeAccountId={outlookAccountId ?? null}
+                  onSwitchAccount={handleSwitchOutlookAccount}
+                  onConnectAccount={handleConnectOutlook}
+                  connecting={connectingOutlook}
+                  switchingAccountId={switchingAccountId}
+                />
+              </div>
+            ) : null}
+
+            {viewport === "tablet" ? (
+              <div className="crm-inbox-layout crm-inbox-layout--tablet">
+                <InboxSidebar {...sidebarProps} compact />
+                <InboxListPanel
+                  {...listProps}
+                  variant="cards"
+                  onOpenFilters={() => setFiltersOpen(true)}
+                />
+              </div>
+            ) : null}
+
+            {viewport === "mobile" && !selectedId ? (
+              <div className="crm-inbox-layout crm-inbox-layout--mobile">
+                <header className="crm-inbox-mobile-header">
+                  <div className="crm-inbox-mobile-header-top">
+                    <div className="crm-inbox-mobile-title-wrap">
+                      <h1 className="crm-inbox-mobile-title">{activeFolder}</h1>
+                      {activeFolder === "Inbox" &&
+                      typeof inboxUnreadCount === "number" &&
+                      inboxUnreadCount > 0 ? (
+                        <span className="crm-inbox-list-unread-pill">
+                          {inboxUnreadCount > 999 ? "999+" : inboxUnreadCount}
+                        </span>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="crm-inbox-mobile-compose"
+                      onClick={() => setComposeOpen(true)}
+                      disabled={!outlookConnected}
+                    >
+                      <i className="ri-add-line" aria-hidden />
+                      Compose
+                    </button>
+                  </div>
+                </header>
+                <InboxListPanel
+                  {...listProps}
+                  variant="cards"
+                  hideToolbar
+                  onOpenFilters={() => setFiltersOpen(true)}
+                />
+              </div>
+            ) : null}
+
+            {viewport === "mobile" && selectedId ? (
+              <div className="crm-inbox-mobile-detail">
+                {active && activeMeta ? (
+                  renderDetail({
+                    onBack: () => setSelectedId(null),
+                    backLabel: "Inbox",
+                  })
+                ) : (
+                  <>
+                    <div className="crm-inbox-detail-back-bar">
+                      <button
+                        type="button"
+                        className="crm-inbox-detail-back"
+                        onClick={() => setSelectedId(null)}
+                      >
+                        <i className="ri-arrow-left-line" aria-hidden />
+                        Inbox
+                      </button>
+                    </div>
+                    {renderDetail()}
+                  </>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
+
+      {viewport === "tablet" ? (
+        <InboxReadingDrawer
+          open={Boolean(selectedId && active)}
+          onClose={() => setSelectedId(null)}
+        >
+          {renderDetail()}
+        </InboxReadingDrawer>
+      ) : null}
+
+      {filtersOpen && viewport !== "desktop" ? (
+        <BottomSheet title="Folders & filters" onClose={() => setFiltersOpen(false)}>
+          <div className="box-body !pt-2">
+            <InboxSidebar {...sidebarProps} />
+          </div>
+        </BottomSheet>
+      ) : null}
 
       <InboxCompose
         open={composeOpen}
@@ -1097,5 +1243,30 @@ export default function InboxPage() {
         sendError={sendError}
       />
     </Fragment>
+  );
+}
+
+function InboxListSkeletonPlaceholder() {
+  return (
+    <div
+      className="crm-inbox-list-skeleton"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading inbox"
+    >
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="crm-inbox-list-item crm-inbox-skeleton-item">
+          <span className="crm-inbox-skeleton-avatar crm-inbox-shimmer" />
+          <div className="crm-inbox-skeleton-body">
+            <div className="crm-inbox-skeleton-row">
+              <span className="crm-inbox-shimmer crm-inbox-skeleton-sender" />
+              <span className="crm-inbox-shimmer crm-inbox-skeleton-time" />
+            </div>
+            <span className="crm-inbox-shimmer crm-inbox-skeleton-subject" />
+            <span className="crm-inbox-shimmer crm-inbox-skeleton-preview" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
