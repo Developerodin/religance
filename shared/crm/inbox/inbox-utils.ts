@@ -329,3 +329,11 @@ export function resolveMailboxProfile(
     account.displayName?.trim() || mailboxDisplayNameFromEmail(account.email);
   return { name, email: account.email };
 }
+
+/** Apply or clear template-derived subject/body; recipients (to/cc/bcc) stay. */
+export function withTemplateContent<
+  T extends { subject: string; body: string },
+>(prev: T, content: { subject: string; body: string } | null): T {
+  if (!content) return { ...prev, subject: "", body: "" };
+  return { ...prev, subject: content.subject, body: content.body };
+}

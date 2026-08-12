@@ -24,6 +24,7 @@ import {
   resolveMailboxProfile,
   resolveSenderName,
   suggestLeadForEmail,
+  withTemplateContent,
   type InboxTag,
 } from "./inbox-utils";
 
@@ -523,16 +524,20 @@ export default function InboxPage() {
 
   const handleComposeTemplateChange = (templateId: string) => {
     setComposeTemplateId(templateId);
-    if (!templateId) return;
+    if (!templateId) {
+      setComposeDraft((prev) => withTemplateContent(prev, null));
+      return;
+    }
     const template = emailTemplates.find((item) => item.id === templateId);
     if (!template) return;
 
     const vars = buildComposeTemplateVars();
-    setComposeDraft((prev) => ({
-      ...prev,
-      subject: applyTemplate(template.subject, vars),
-      body: textToHtml(applyTemplate(template.body, vars)),
-    }));
+    setComposeDraft((prev) =>
+      withTemplateContent(prev, {
+        subject: applyTemplate(template.subject, vars),
+        body: textToHtml(applyTemplate(template.body, vars)),
+      }),
+    );
   };
 
   const composeInitializedRef = useRef(false);
