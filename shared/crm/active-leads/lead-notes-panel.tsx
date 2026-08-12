@@ -121,7 +121,7 @@ export function LeadNotesPanel({ lead }: LeadNotesPanelProps) {
               href={leadEditHref(lead.id, { from: "active-leads" })}
               className="text-[0.75rem] text-primary"
             >
-              Edit on full page
+              Edit
             </Link>
           </div>
           <p className="text-[0.875rem] text-defaulttextcolor whitespace-pre-wrap mb-0 leading-relaxed">

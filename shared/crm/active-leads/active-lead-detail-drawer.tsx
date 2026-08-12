@@ -185,14 +185,14 @@ export function ActiveLeadDetailDrawer({
                 {lead.companyName}
               </p>
               <p className="text-[0.75rem] text-textmuted mb-2">
-                Quick view — edit on full page.
+                Quick view
               </p>
               <Link
                 href={leadEditHref(lead.id, { from: "active-leads" })}
                 className="text-[0.75rem] text-primary inline-flex items-center gap-1 mb-2"
               >
                 <i className="ri-external-link-line"></i>
-                Open full page
+                Edit
               </Link>
               <div className="flex flex-wrap items-center gap-2">
                 <LeadStageBadge stage={lead.stage} />
@@ -425,7 +425,7 @@ export function ActiveLeadDetailDrawer({
             href={leadEditHref(lead.id, { from: "active-leads" })}
             className="ti-btn ti-btn-light"
           >
-            Open full page
+            Edit
           </Link>
           {onDelete && (
             <button
