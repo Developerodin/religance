@@ -154,8 +154,11 @@ export async function getOutlookThread(
 export async function sendOutlookMessage(input: {
   accountId: string;
   to: string;
+  cc?: string[];
+  bcc?: string[];
   subject: string;
   html: string;
+  attachments?: { name: string; contentType: string; contentBytes: string }[];
 }): Promise<JsonResult<{ id: string | null; threadId?: string | null }>> {
   return apiSend<{ id: string | null; threadId?: string | null }>(
     "POST",

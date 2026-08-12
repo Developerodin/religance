@@ -369,7 +369,11 @@ export default function ContactsPage() {
                               onClick={(e) => e.stopPropagation()}
                             >
                               <Link
-                                href="/inbox"
+                                href={
+                                  contact.email
+                                    ? `/inbox?compose=${encodeURIComponent(contact.email)}`
+                                    : "/inbox"
+                                }
                                 className="saved-contacts-icon-btn"
                                 title="Email"
                                 aria-label={`Email ${contact.name}`}

@@ -130,8 +130,14 @@ export type SaveFromDiscoveryInput = {
 export type SendCrmEmailInput = {
   leadId?: string | null;
   toEmail: string;
+  cc?: string[];
+  bcc?: string[];
   subject: string;
   body: string;
+  /** body is already HTML (rich compose editor) — skip newline→<br/> conversion. */
+  bodyIsHtml?: boolean;
+  /** base64-encoded file attachments. Compose (new message) only. */
+  attachments?: { name: string; contentType: string; contentBytes: string }[];
   /** Outlook message id to thread against. Only synced emails have one. */
   replyToMessageId?: string | null;
   mode?: "reply" | "replyAll" | "forward";
@@ -2263,7 +2269,9 @@ export function CrmProvider({ children }: { children: ReactNode }) {
             l.contactEmail.toLowerCase() === input.toEmail.toLowerCase()
         );
 
-      const html = input.body.replace(/\n/g, "<br/>");
+      const html = input.bodyIsHtml
+        ? input.body
+        : input.body.replace(/\n/g, "<br/>");
       const messageId = input.replyToMessageId ?? null;
       const accountId = state.outlookAccountId;
       const sent =
@@ -2276,8 +2284,11 @@ export function CrmProvider({ children }: { children: ReactNode }) {
               : await sendOutlookMessage({
                   accountId,
                   to: input.toEmail,
+                  cc: input.cc,
+                  bcc: input.bcc,
                   subject: input.subject,
                   html,
+                  attachments: input.attachments,
                 });
       if (!sent.live) {
         return sent.error;

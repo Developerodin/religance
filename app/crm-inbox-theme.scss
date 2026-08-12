@@ -1623,6 +1623,168 @@
     }
   }
 
+  /* Toolbar + editor + attachments read as ONE input, like every mail client */
+  .crm-inbox-compose-editor-group {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    max-width: 42rem;
+    border: 1px solid var(--inbox-border);
+    border-radius: 0.625rem;
+    background: var(--inbox-surface-3);
+    overflow: hidden;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+    &:focus-within {
+      border-color: rgba(139, 92, 246, 0.45);
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
+    }
+
+    &.is-dragover {
+      border-color: var(--inbox-purple);
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+    }
+  }
+
+  .crm-inbox-compose-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0.375rem 0.5rem;
+    border-bottom: 1px solid var(--inbox-border);
+  }
+
+  .crm-inbox-compose-tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: none;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: var(--inbox-muted);
+    font-size: 1.05rem;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+
+    &:hover {
+      background: rgba(139, 92, 246, 0.14);
+      color: var(--inbox-text);
+    }
+
+    &.is-active {
+      background: rgba(139, 92, 246, 0.22);
+      color: var(--inbox-purple);
+    }
+  }
+
+  .crm-inbox-compose-editor {
+    resize: none;
+    overflow-y: auto;
+    min-height: 12rem;
+    max-height: 22rem;
+    cursor: text;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    max-width: none;
+
+    &:focus {
+      border-color: transparent;
+      box-shadow: none;
+    }
+
+    /* contentEditable has no native placeholder */
+    &:empty::before {
+      content: attr(data-placeholder);
+      color: var(--inbox-muted);
+      pointer-events: none;
+    }
+
+    ul,
+    ol {
+      margin: 0.25rem 0;
+      padding-inline-start: 1.5rem;
+    }
+    ul { list-style: disc; }
+    ol { list-style: decimal; }
+  }
+
+  .crm-inbox-compose-drop-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--inbox-purple);
+    background: rgba(139, 92, 246, 0.12);
+    backdrop-filter: blur(2px);
+    pointer-events: none;
+  }
+
+  .crm-inbox-compose-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    border-top: 1px solid var(--inbox-border);
+  }
+
+  .crm-inbox-compose-attachment {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: 100%;
+    padding: 0.35rem 0.4rem 0.35rem 0.65rem;
+    border: 1px solid var(--inbox-border);
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    color: var(--inbox-text);
+    background: var(--inbox-surface-2);
+
+    i { color: var(--inbox-muted); }
+  }
+
+  .crm-inbox-compose-attachment-name {
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .crm-inbox-compose-attachment-size {
+    color: var(--inbox-muted);
+    flex-shrink: 0;
+  }
+
+  .crm-inbox-compose-attachment-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--inbox-muted);
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+    }
+  }
+
+  .crm-inbox-compose-attach-error {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: #fca5a5;
+  }
+
   .crm-inbox-compose-error {
     display: flex;
     align-items: flex-start;
@@ -1640,6 +1802,36 @@
     }
   }
 
+  .crm-inbox-compose-to-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .crm-inbox-compose-reveals {
+    display: inline-flex;
+    gap: 0.125rem;
+    flex-shrink: 0;
+  }
+
+  .crm-inbox-compose-reveal {
+    border: none;
+    background: transparent;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--inbox-muted);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+
+    &:hover {
+      background: rgba(139, 92, 246, 0.14);
+      color: var(--inbox-text);
+    }
+  }
+
   .crm-inbox-compose-footer {
     display: flex;
     align-items: center;
@@ -1648,6 +1840,24 @@
     padding: 1rem 1.375rem;
     border-top: 1px solid var(--inbox-border);
     background: var(--inbox-surface);
+  }
+
+  .crm-inbox-compose-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+  }
+
+  .crm-inbox-compose-btn--ghost {
+    background: transparent;
+    border: 1px solid var(--inbox-border);
+    color: var(--inbox-muted);
+
+    &:hover {
+      color: var(--inbox-text);
+      border-color: rgba(139, 92, 246, 0.45);
+      background: rgba(139, 92, 246, 0.1);
+    }
   }
 
   .crm-inbox-compose-btn {
@@ -1778,6 +1988,35 @@ html.light {
   .crm-inbox-check { border-color: rgba(38, 30, 22, 0.28); }
   .crm-inbox-avatar { border-color: rgba(38, 30, 22, 0.1); }
   .crm-inbox-contacts-add { border-color: rgba(38, 30, 22, 0.2); }
+
+  /* Compose header: hardcoded purple gradient → warm light surface */
+  .crm-inbox-compose-header {
+    background: var(--inbox-surface);
+    color: var(--inbox-text);
+    border-bottom: 1px solid var(--inbox-border);
+  }
+  .crm-inbox-compose-title { color: #241c14; }
+  .crm-inbox-compose-eyebrow { color: #6d28d9; }
+  .crm-inbox-compose-close {
+    background: rgba(38, 30, 22, 0.06);
+    color: rgba(38, 30, 22, 0.7);
+
+    &:hover {
+      background: rgba(38, 30, 22, 0.12);
+    }
+  }
+
+  /* Pale red error text → darker for contrast on light surfaces */
+  .crm-inbox-compose-attach-error,
+  .crm-inbox-compose-attachment-remove:hover {
+    color: #b91c1c;
+  }
+
+  /* Pale purple accents → deeper for contrast on light tints */
+  .crm-inbox-compose-tool.is-active,
+  .crm-inbox-compose-drop-hint {
+    color: #6d28d9;
+  }
 
   /* Selected/active: keep solid purple + white text readable on light */
   .crm-inbox-folder-btn.is-active { background: var(--inbox-purple-deep); }

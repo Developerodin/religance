@@ -7,7 +7,7 @@ import { downloadOutlookAttachment } from "@/shared/crm/store/outlook-api";
 import Seo from "@/shared/layout-components/seo/seo";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { InboxCompose } from "./inbox-compose";
+import { InboxCompose, type ComposeAttachment } from "./inbox-compose";
 import { InboxContactsRail } from "./inbox-contacts-rail";
 import {
   InboxDetailEmpty,
@@ -26,6 +26,22 @@ import {
   suggestLeadForEmail,
   type InboxTag,
 } from "./inbox-utils";
+
+function splitRecipients(value: string): string[] {
+  return value
+    .split(/[,;]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/** Plain-text template body → safe HTML for the rich compose editor. */
+function textToHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br/>");
+}
 
 function folderForEmail(
   email: CrmEmail,
@@ -128,9 +144,14 @@ export default function InboxPage() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeDraft, setComposeDraft] = useState({
     to: "",
+    cc: "",
+    bcc: "",
     subject: "",
     body: "",
   });
+  const [composeAttachments, setComposeAttachments] = useState<
+    ComposeAttachment[]
+  >([]);
   const [composeTemplateId, setComposeTemplateId] = useState("");
   // Star / read / archive / trash live in the CRM's persisted email overlay,
   // not component state — they used to reset on every reload.
@@ -284,6 +305,19 @@ export default function InboxPage() {
   useEffect(() => {
     const emailId = searchParams.get("email");
     if (emailId) setPendingEmailId(emailId);
+    const composeTo = searchParams.get("compose");
+    if (composeTo) {
+      setComposeDraft((prev) => ({ ...prev, to: composeTo }));
+      setComposeOpen(true);
+      const params = new URLSearchParams(window.location.search);
+      params.delete("compose");
+      const qs = params.toString();
+      window.history.replaceState(
+        {},
+        "",
+        `${window.location.pathname}${qs ? `?${qs}` : ""}`
+      );
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -475,7 +509,7 @@ export default function InboxPage() {
     setComposeDraft((prev) => ({
       ...prev,
       subject: applyTemplate(template.subject, vars),
-      body: applyTemplate(template.body, vars),
+      body: textToHtml(applyTemplate(template.body, vars)),
     }));
   };
 
@@ -489,7 +523,7 @@ export default function InboxPage() {
     setComposeDraft((prev) => ({
       ...prev,
       subject: applyTemplate(template.subject, vars),
-      body: applyTemplate(template.body, vars),
+      body: textToHtml(applyTemplate(template.body, vars)),
     }));
   };
 
@@ -512,7 +546,7 @@ export default function InboxPage() {
     setComposeDraft((prev) => ({
       ...prev,
       subject: applyTemplate(template.subject, vars),
-      body: applyTemplate(template.body, vars),
+      body: textToHtml(applyTemplate(template.body, vars)),
     }));
   }, [buildComposeTemplateVars, composeOpen, emailTemplates]);
 
@@ -675,21 +709,29 @@ export default function InboxPage() {
   };
 
   const handleSendCompose = async () => {
-    const { to, subject, body } = composeDraft;
-    if (!to.trim() || !subject.trim() || !body.trim()) return;
+    const { to, cc, bcc, subject, body } = composeDraft;
+    const bodyText = body.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").trim();
+    if (!to.trim() || !subject.trim() || !bodyText) return;
     setSending(true);
     setSendError(null);
     const error = await sendCrmEmail({
       toEmail: to.trim(),
+      cc: splitRecipients(cc),
+      bcc: splitRecipients(bcc),
       subject: subject.trim(),
-      body: body.trim(),
+      body,
+      bodyIsHtml: true,
+      attachments: composeAttachments.map(
+        ({ name, contentType, contentBytes }) => ({ name, contentType, contentBytes })
+      ),
     });
     setSending(false);
     if (error) {
       setSendError(error);
       return;
     }
-    setComposeDraft({ to: "", subject: "", body: "" });
+    setComposeDraft({ to: "", cc: "", bcc: "", subject: "", body: "" });
+    setComposeAttachments([]);
     setComposeOpen(false);
     setActiveFolder("Sent Items");
     setSentFlash(true);
@@ -1014,6 +1056,8 @@ export default function InboxPage() {
         onDraftChange={(patch) =>
           setComposeDraft((prev) => ({ ...prev, ...patch }))
         }
+        attachments={composeAttachments}
+        onAttachmentsChange={setComposeAttachments}
         onSend={handleSendCompose}
         sending={sending}
         sendError={sendError}
