@@ -691,10 +691,10 @@ html[data-nav-layout="vertical"]:not([data-toggled="menu-click-closed"]):not([da
 }
 
 /* Lead Discovery — mobile progressive drill-down (Salts → Medicines → Results) */
+/* Height follows content; page scrolls. Sticky CTA stays; no 100vh shell. */
 .lead-discovery-mobile {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 8.5rem);
   max-width: 100%;
   overflow-x: hidden;
 }
@@ -711,22 +711,16 @@ html[data-nav-layout="vertical"]:not([data-toggled="menu-click-closed"]):not([da
 .lead-discovery-mobile-step {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
   min-width: 0;
 }
 
 .lead-discovery-mobile-panel {
-  flex: 1;
-  min-height: 0;
   min-width: 0;
-  overflow: hidden;
 
   .lead-discovery-salts,
   .lead-discovery-medicines {
     min-height: 0 !important;
-    height: 100%;
-    max-height: calc(100vh - 12.5rem);
+    height: auto;
   }
 }
 
@@ -754,10 +748,7 @@ html[data-nav-layout="vertical"]:not([data-toggled="menu-click-closed"]):not([da
 }
 
 .lead-discovery-mobile-results {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  min-width: 0;
   max-width: 100%;
 }
 

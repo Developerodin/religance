@@ -130,7 +130,7 @@ export default function MedicinesTablePanel({
   };
 
   return (
-    <div className="lead-discovery-medicines flex flex-col h-full min-h-[calc(100vh-10rem)] min-w-0 overflow-x-hidden">
+    <div className="lead-discovery-medicines flex flex-col h-auto min-h-0 xl:h-full xl:min-h-[calc(100vh-10rem)] min-w-0 overflow-x-hidden">
       <div className="box-header flex-col items-stretch gap-2 !block !px-2.5 !py-2 border-b border-defaultborder dark:border-defaultborder/10">
         <div className="flex items-center justify-between gap-1">
           <div className="box-title mb-0 text-[0.875rem] before:!hidden">

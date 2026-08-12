@@ -669,7 +669,8 @@ export default function LeadDiscoveryBoard() {
   return (
     <>
       {/* Desktop: unchanged 3-pane workspace */}
-      <div className="lead-discovery-board hidden md:grid grid-cols-12 gap-0 border border-defaultborder dark:border-defaultborder/10 rounded-md bg-white dark:bg-bodybg">
+      {/* ponytail: xl (1200) — 3-pane only fits once salts/medicines leave col-span-12; nested below */}
+      <div className="lead-discovery-board hidden xl:grid grid-cols-12 gap-0 border border-defaultborder dark:border-defaultborder/10 rounded-md bg-white dark:bg-bodybg">
         <div className="xxl:col-span-2 xl:col-span-4 col-span-12 min-w-0 border-e border-defaultborder dark:border-defaultborder/10">
           <div className="mb-0 h-full min-w-0">
             <SaltsTablePanel
@@ -828,7 +829,7 @@ export default function LeadDiscoveryBoard() {
       </div>
 
       {/* Mobile: progressive Salts → Medicines → Results */}
-      <div className="lead-discovery-mobile md:hidden border border-defaultborder dark:border-defaultborder/10 rounded-md bg-white dark:bg-bodybg overflow-hidden">
+      <div className="lead-discovery-mobile xl:hidden border border-defaultborder dark:border-defaultborder/10 rounded-md bg-white dark:bg-bodybg overflow-hidden">
         <div className="lead-discovery-mobile-header">
           {mobileStep !== "salts" ? (
             <button
