@@ -793,7 +793,7 @@ export default function InboxPage() {
         <Seo title="Inbox" />
         <div className="crm-inbox-page">
           <div className="box custom-box !mb-0">
-            <div className="box-body py-5 px-3 px-md-4">
+            <div className="box-body !py-5 !px-3 px-md-4">
               <div className="mx-auto w-full max-w-2xl text-center">
                 <span className="avatar avatar-lg bg-primary/10 text-primary mb-3">
                   <InboxSyncIndicator active size="lg" />
@@ -819,7 +819,7 @@ export default function InboxPage() {
         <Seo title="Inbox" />
         <div className="crm-inbox-page">
           <div className="box custom-box !mb-0">
-            <div className="box-body px-3 px-md-5 py-4 py-md-5">
+            <div className="box-body !px-3 px-md-5 !py-4 py-md-5">
               <div className="mx-auto w-full max-w-5xl">
                 <div className="row g-4 g-xl-5 align-items-center">
                   <div className="col-lg-6 text-center text-lg-start">

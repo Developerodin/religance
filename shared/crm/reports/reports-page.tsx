@@ -387,7 +387,7 @@ export default function ReportsPage() {
     <Fragment>
       <Seo title="Reports" />
       <div className="box custom-box mb-6">
-        <div className="box-body py-3 px-4 flex flex-wrap items-center gap-2">
+        <div className="box-body !py-3 !px-4 flex flex-wrap items-center gap-2">
           <h6 className="mb-0 me-auto">Reports</h6>
           {(liveStatus === "loading" || liveStatus === "refreshing") && (
             <span className="badge bg-info/10 text-info" aria-live="polite">
@@ -778,7 +778,7 @@ export default function ReportsPage() {
       <div className="grid grid-cols-12 gap-x-6 gap-y-6 items-stretch mb-6">
         <div className={`xxl:col-span-6 xl:col-span-12 col-span-12 ${COL_STRETCH}`}>
           <div className={BOX_STRETCH}>
-            <div className="box-header sm:flex block">
+            <div className="box-header !block sm:!flex">
               <div className="box-title">Follow-up Tasks</div>
               <div className="tab-menu-heading border-0 p-0 ms-auto sm:mt-0 my-2">
                 <div className="tabs-menu-task me-3">
@@ -1012,7 +1012,7 @@ export default function ReportsPage() {
               <div className="box-title">Win Rate</div>
               <BoxMenu />
             </div>
-            <div className="box-body !p-0 px-1 flex-1 flex flex-col">
+            <div className="box-body !p-0 !px-1 flex-1 flex flex-col">
               <WinRateRadialChart percent={report.winRate} />
               <div className="grid grid-cols-12 pt-3">
                 <div className="xl:col-span-12 col-span-12 border-b dark:border-defaultborder/10 pb-5 text-center flex flex-wrap justify-center">

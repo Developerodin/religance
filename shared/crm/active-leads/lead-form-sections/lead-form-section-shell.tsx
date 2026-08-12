@@ -14,7 +14,7 @@ export function LeadFormSectionShell({
   badge,
 }: LeadFormSectionShellProps) {
   return (
-    <div className="box custom-box mb-4">
+    <div className="box custom-box !mb-4">
       <div className="box-header border-b border-defaultborder dark:border-defaultborder/10 flex items-center justify-between gap-2 min-w-0">
         <h6 className="box-title mb-0 before:!hidden truncate">{title}</h6>
         {badge && (

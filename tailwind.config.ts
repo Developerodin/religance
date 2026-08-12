@@ -154,6 +154,8 @@ module.exports = {
       'spin-slow': 'spin 3s linear infinite',
       'slow-ping':'ping 2s linear infinite',
       'animate-wase': 'wase 4s linear infinite',
+      'sheet-up': 'sheetUp 240ms cubic-bezier(0.32, 0.72, 0, 1)',
+      'backdrop-in': 'backdropIn 200ms ease-out',
     },
     keyframes: {
       particles: {
@@ -227,6 +229,14 @@ module.exports = {
         to: {
           transform: "rotate(360deg)",
         },
+      },
+      sheetUp: {
+        from: { transform: "translateY(100%)" },
+        to: { transform: "translateY(0)" },
+      },
+      backdropIn: {
+        from: { opacity: "0" },
+        to: { opacity: "1" },
       },
     },
   },

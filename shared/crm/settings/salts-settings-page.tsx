@@ -163,7 +163,7 @@ export default function SaltsSettingsPage() {
     <Fragment>
       <Seo title="Salts Master" />
 
-      <div className="box custom-box mb-0 flex flex-col min-h-[calc(100vh-12rem)]">
+      <div className="box custom-box !mb-0 flex flex-col min-h-[calc(100vh-12rem)]">
         <div className="box-header !flex-wrap gap-x-4 gap-y-3 !items-start">
           <div className="min-w-0 flex-1 basis-full lg:basis-auto">
             <h5 className="box-title mb-0 before:!hidden">Salts Master</h5>

@@ -43,7 +43,7 @@ export default function SettingsPage() {
           <div key={item.path} className="col-span-12 md:col-span-4">
             <Link
               href={item.path}
-              className="box custom-box mb-0 block h-full transition-shadow hover:shadow-md"
+              className="box custom-box !mb-0 h-full transition-shadow hover:shadow-md"
             >
               <div className="box-body">
                 <span

@@ -49,7 +49,7 @@ export function DuplicateLeadDialog({
         aria-labelledby="duplicate-lead-title"
         className="fixed inset-0 z-[170] flex items-center justify-center p-4 pointer-events-none"
       >
-        <div className="box custom-box mb-0 w-full max-w-lg pointer-events-auto shadow-lg">
+        <div className="box custom-box !mb-0 w-full max-w-lg pointer-events-auto !shadow-lg">
           <div className="box-header border-b border-defaultborder dark:border-defaultborder/10">
             <h6
               id="duplicate-lead-title"

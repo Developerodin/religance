@@ -338,7 +338,7 @@ export default function TemplatesPage() {
       <Seo title="Email Templates" />
 
       <div
-        className="box custom-box mb-0 flex flex-col min-h-[calc(100vh-12rem)]"
+        className="box custom-box !mb-0 flex flex-col min-h-[calc(100vh-12rem)]"
         aria-busy={isSyncing}
       >
         <div className="box-header !flex-wrap gap-x-4 gap-y-3 !items-start">

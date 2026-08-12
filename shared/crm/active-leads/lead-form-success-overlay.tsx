@@ -102,8 +102,8 @@ export function LeadFormSuccessOverlay({
         aria-describedby={messageId}
         className="fixed inset-0 z-[170] flex items-center justify-center p-4 pointer-events-none"
       >
-        <div className="box custom-box mb-0 w-full max-w-md pointer-events-auto shadow-lg">
-          <div className="box-body text-center py-6 px-5">
+        <div className="box custom-box !mb-0 w-full max-w-md pointer-events-auto !shadow-lg">
+          <div className="box-body text-center !py-6 !px-5">
             <span
               className="avatar avatar-lg bg-success/10 text-success mb-3 inline-flex justify-center items-center"
               aria-hidden

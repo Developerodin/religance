@@ -11,6 +11,7 @@ import {
 } from "@/shared/crm/active-leads/active-leads-utils";
 import { FollowUpDateCell } from "@/shared/crm/active-leads/follow-up-date-cell";
 import LeadStageBadge from "@/shared/crm/active-leads/lead-stage-badge";
+import { BottomSheet } from "@/shared/crm/ui/bottom-sheet";
 import { SendEmailModal } from "@/shared/crm/send-email/send-email-modal";
 import type { SendEmailTarget } from "@/shared/crm/send-email/send-email-types";
 import { sendEmailTargetFromLead } from "@/shared/crm/send-email/send-email-types";
@@ -107,6 +108,7 @@ export default function ActiveLeadsBoard() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [selectedLead, setSelectedLead] = useState<CrmLead | null>(null);
   const [sendTarget, setSendTarget] = useState<SendEmailTarget | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const companyFilter = searchParams.get("company") ?? "";
 
@@ -159,6 +161,10 @@ export default function ActiveLeadsBoard() {
 
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / pageSize));
   const filtersActive = hasActiveLeadFilters(filterOpts);
+  // Only the three fields that live inside the mobile sheet.
+  const sheetFilterCount = [stageFilter, saltFilter, assigneeFilter].filter(
+    Boolean
+  ).length;
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -255,7 +261,7 @@ export default function ActiveLeadsBoard() {
         </div>
         <button
           type="button"
-          className="ti-btn ti-btn-primary shrink-0 inline-flex items-center justify-center gap-1 whitespace-nowrap !w-auto !h-auto !py-2 !px-3 !text-[0.8125rem]"
+          className="ti-btn ti-btn-primary shrink-0 inline-flex items-center justify-center gap-1 whitespace-nowrap !w-full sm:!w-auto !h-auto !py-2 !px-3 !text-[0.8125rem] !min-h-[2.75rem] sm:!min-h-0"
           onClick={() => router.push(leadNewHref({ from: "active-leads" }))}
         >
           <i className="ri-add-line me-1"></i>
@@ -279,8 +285,80 @@ export default function ActiveLeadsBoard() {
         ))}
       </div>
 
-      <div className="box custom-box active-leads-main mb-0">
+      <div className="box custom-box active-leads-main !mb-0">
         <div className="active-leads-toolbar">
+          {/* Mobile toolbar: tabs, search, and one Filters entry point. */}
+          <div className="md:hidden">
+            <div
+              className="active-leads-segmented is-fluid"
+              role="group"
+              aria-label="Pipeline view"
+            >
+              {PIPELINE_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={pipelineFilter === tab.id ? "is-active" : ""}
+                  onClick={() => setPipelineFilter(tab.id)}
+                >
+                  <i className={`${tab.icon} me-1`}></i>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2 mt-2">
+              <div className="relative flex-1 min-w-0">
+                <i
+                  className="ri-search-line absolute start-3 top-1/2 -translate-y-1/2 text-textmuted pointer-events-none"
+                  aria-hidden="true"
+                />
+                <input
+                  type="search"
+                  className="form-control !ps-9 !min-h-[2.75rem] !text-[0.8125rem]"
+                  placeholder="Search leads, company…"
+                  aria-label="Search active leads"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                className="ti-btn ti-btn-light shrink-0 !mb-0 !min-h-[2.75rem] !text-[0.8125rem]"
+                onClick={() => setFiltersOpen(true)}
+              >
+                <i className="ri-equalizer-line me-1" aria-hidden="true" />
+                Filters
+                {sheetFilterCount > 0 && (
+                  <span className="badge bg-primary text-white ms-1">
+                    {sheetFilterCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 mt-2 text-[0.75rem] text-textmuted">
+              <span>
+                Showing{" "}
+                <strong className="text-defaulttextcolor">
+                  {filteredLeads.length}
+                </strong>{" "}
+                of {leads.length}
+              </span>
+              {filtersActive && (
+                <button
+                  type="button"
+                  className="text-primary font-medium"
+                  onClick={clearFilters}
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Desktop toolbar — unchanged. Wrapper carries the breakpoint. */}
+          <div className="hidden md:block">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
             <div className="active-leads-segmented" role="group" aria-label="Pipeline view">
               {PIPELINE_TABS.map((tab) => (
@@ -414,8 +492,95 @@ export default function ActiveLeadsBoard() {
               </button>
             ))}
           </div>
+          </div>
         </div>
 
+        {/* Mobile: one card per lead. Tap anywhere opens the lead. */}
+        <div className="md:hidden active-leads-cards">
+          {paginatedLeads.length === 0 ? (
+            <div className="active-leads-empty">
+              <span className="avatar avatar-xl bg-primary/10 text-primary mb-3">
+                <i className="ri-inbox-line text-2xl"></i>
+              </span>
+              <p className="font-medium text-defaulttextcolor mb-1">
+                No leads match your filters
+              </p>
+              <p className="text-[0.8125rem] text-textmuted mb-3">
+                Try adjusting search, stage, or pipeline view.
+              </p>
+              {filtersActive && (
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-primary active-leads-empty-cta"
+                  onClick={clearFilters}
+                >
+                  <i className="ri-filter-off-line me-1" aria-hidden="true"></i>
+                  Clear all filters
+                </button>
+              )}
+            </div>
+          ) : (
+            paginatedLeads.map((lead) => (
+              <button
+                key={lead.id}
+                type="button"
+                className="active-leads-card"
+                onClick={() => openLeadDrawer(lead)}
+                aria-label={`Open ${lead.title}`}
+              >
+                <div className="active-leads-card-head">
+                  <span className="active-leads-company-avatar">
+                    {companyInitials(lead.companyName)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="active-leads-card-title">{lead.title}</p>
+                    <p className="active-leads-card-company">
+                      <i className="ri-building-2-line shrink-0" aria-hidden="true"></i>
+                      {lead.companyName}
+                    </p>
+                    <p className="active-leads-card-location">{lead.location}</p>
+                  </div>
+                  <i
+                    className="ri-arrow-right-s-line active-leads-card-chevron"
+                    aria-hidden="true"
+                  ></i>
+                </div>
+
+                <div className="active-leads-card-grid">
+                  <div>
+                    <span className="active-leads-card-label">Contact</span>
+                    <p className="active-leads-card-strong">{lead.contactName}</p>
+                    <p className="active-leads-card-muted">{lead.contactRole}</p>
+                    <p className="active-leads-card-assignee">
+                      <i className="ri-user-line" aria-hidden="true"></i>
+                      {lead.assignedTo}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="active-leads-card-label">Product</span>
+                    <p className="active-leads-card-strong">{lead.matchedSalt}</p>
+                    <p className="active-leads-card-muted">
+                      {lead.matchedMedicine}
+                    </p>
+                    <p className="active-leads-card-muted">{lead.dosageForm}</p>
+                  </div>
+                </div>
+
+                <div className="active-leads-card-foot">
+                  <span className="inline-flex items-center gap-2">
+                    <LeadStageBadge stage={lead.stage} compact />
+                    <LeadScoreBadge score={lead.leadScore} />
+                  </span>
+                  <span className="text-[0.75rem]">
+                    <FollowUpDateCell followUpDate={lead.followUpDate} />
+                  </span>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className="hidden md:block">
         <div className="table-responsive active-leads-table">
           <table className="table table-hover ti-custom-table min-w-full mb-0 text-[0.8125rem]">
             <thead className="ti-custom-table-head">
@@ -566,8 +731,35 @@ export default function ActiveLeadsBoard() {
             </tbody>
           </table>
         </div>
+        </div>
 
         <div className="box-footer active-leads-footer !px-3 !py-2.5 border-t border-defaultborder dark:border-defaultborder/10">
+          {/* Mobile pager: two big targets, no numbered list to cram in. */}
+          <div className="md:hidden active-leads-pager-mobile">
+            <button
+              type="button"
+              className="ti-btn ti-btn-light !mb-0 !min-h-[2.75rem]"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <i className="ri-arrow-left-s-line" aria-hidden="true"></i>
+              Prev
+            </button>
+            <span className="text-[0.75rem] text-textmuted tabular-nums">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className="ti-btn ti-btn-light !mb-0 !min-h-[2.75rem]"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+              <i className="ri-arrow-right-s-line" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <div className="hidden md:block">
           <div className="lead-discovery-panel-footer min-h-[2rem]">
             <div className="flex items-center gap-2 justify-start min-w-0">
               <label className="flex items-center gap-1 mb-0 whitespace-nowrap shrink-0">
@@ -636,13 +828,111 @@ export default function ActiveLeadsBoard() {
               {page}/{totalPages}
             </span>
           </div>
+          </div>
         </div>
       </div>
+
+      {filtersOpen && (
+        <BottomSheet title="Filters" onClose={() => setFiltersOpen(false)}>
+          <div className="box-body space-y-3">
+            <div>
+              <label
+                className="active-leads-filter-label"
+                htmlFor="al-sheet-stage"
+              >
+                Stage
+              </label>
+              <select
+                id="al-sheet-stage"
+                className="form-select !min-h-[2.75rem] !text-[0.8125rem]"
+                value={stageFilter}
+                onChange={(e) =>
+                  setStageFilter(e.target.value as LeadStage | "")
+                }
+              >
+                <option value="">All stages</option>
+                {LEAD_STAGES.map((stage) => (
+                  <option key={stage} value={stage}>
+                    {stage}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                className="active-leads-filter-label"
+                htmlFor="al-sheet-salt"
+              >
+                Salt
+              </label>
+              <select
+                id="al-sheet-salt"
+                className="form-select !min-h-[2.75rem] !text-[0.8125rem]"
+                value={saltFilter}
+                onChange={(e) => setSaltFilter(e.target.value)}
+              >
+                <option value="">All salts</option>
+                {salts.map((salt) => (
+                  <option key={salt} value={salt}>
+                    {salt}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                className="active-leads-filter-label"
+                htmlFor="al-sheet-assignee"
+              >
+                Assignee
+              </label>
+              <select
+                id="al-sheet-assignee"
+                className="form-select !min-h-[2.75rem] !text-[0.8125rem]"
+                value={assigneeFilter}
+                onChange={(e) => setAssigneeFilter(e.target.value)}
+              >
+                <option value="">All assignees</option>
+                {assignees.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                className="ti-btn ti-btn-light flex-1 !mb-0 !min-h-[2.75rem]"
+                onClick={() => {
+                  setStageFilter("");
+                  setSaltFilter("");
+                  setAssigneeFilter("");
+                }}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                className="ti-btn ti-btn-primary flex-1 !mb-0 !min-h-[2.75rem]"
+                onClick={() => setFiltersOpen(false)}
+              >
+                Show {filteredLeads.length} lead
+                {filteredLeads.length === 1 ? "" : "s"}
+              </button>
+            </div>
+          </div>
+        </BottomSheet>
+      )}
 
       <ActiveLeadDetailDrawer
         lead={selectedLead}
         onClose={() => setSelectedLead(null)}
         onSendEmail={(l) => setSendTarget(sendEmailTargetFromLead(l))}
+        onDelete={(l) => {
+          setSelectedLead(null);
+          askDelete(l);
+        }}
       />
 
       <SendEmailModal

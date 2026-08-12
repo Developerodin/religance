@@ -94,7 +94,7 @@ export function SaveToContactModal({
         aria-labelledby="save-to-contact-title"
         className="fixed inset-0 z-[170] flex items-center justify-center p-4 pointer-events-none"
       >
-        <div className="box custom-box mb-0 w-full max-w-lg max-h-[90dvh] overflow-y-auto pointer-events-auto shadow-lg">
+        <div className="box custom-box !mb-0 w-full max-w-lg max-h-[90dvh] overflow-y-auto pointer-events-auto !shadow-lg">
           <div className="box-header border-b border-defaultborder dark:border-defaultborder/10">
             <h6 id="save-to-contact-title" className="box-title mb-0 before:!hidden">
               Save to Contact

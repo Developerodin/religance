@@ -624,7 +624,7 @@ export default function LeadFormPage({ mode }: LeadFormPageProps) {
           )}
 
           <div className="w-full min-w-0">
-            <div className="box custom-box mb-4">
+            <div className="box custom-box !mb-4">
               <div className="box-header border-b border-defaultborder dark:border-defaultborder/10">
                 <h6 className="box-title mb-0 before:!hidden">Lead details</h6>
               </div>

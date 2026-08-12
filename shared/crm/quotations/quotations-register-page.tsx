@@ -15,6 +15,7 @@ import {
   QUOTATION_CURRENCIES,
   QUOTATION_STATUSES,
 } from "@/shared/crm/store/types";
+import { BottomSheet } from "@/shared/crm/ui/bottom-sheet";
 import { ConfirmDeleteOverlay } from "@/shared/crm/ui/confirm-delete-overlay";
 import Seo from "@/shared/layout-components/seo/seo";
 import { Fragment, useMemo, useState } from "react";
@@ -37,6 +38,9 @@ export default function QuotationsRegisterPage() {
   const [status, setStatus] = useState("");
   const [currency, setCurrency] = useState("");
   const [owner, setOwner] = useState("");
+  const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [detail, setDetail] = useState<CrmQuotation | null>(null);
   const [editor, setEditor] = useState<EditorState>(null);
   const [pendingDelete, setPendingDelete] = useState<CrmQuotation | null>(null);
 
@@ -45,18 +49,26 @@ export default function QuotationsRegisterPage() {
     [quotations]
   );
 
-  const filtered = useMemo(
-    () =>
-      quotations.filter(
-        (q) =>
-          (!status || q.status === status) &&
-          (!currency || q.currency === currency) &&
-          (!owner || q.owner === owner)
-      ),
-    [quotations, status, currency, owner]
-  );
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return quotations.filter(
+      (q) =>
+        (!status || q.status === status) &&
+        (!currency || q.currency === currency) &&
+        (!owner || q.owner === owner) &&
+        (!term ||
+          `${q.quoteNo} ${q.companyName} ${q.product}`
+            .toLowerCase()
+            .includes(term))
+    );
+  }, [quotations, status, currency, owner, search]);
 
-  const filtersActive = Boolean(status || currency || owner);
+  const activeFilters = [
+    status && `Status: ${status}`,
+    currency && `Currency: ${currency}`,
+    owner && `Owner: ${owner}`,
+  ].filter(Boolean) as string[];
+  const filtersActive = activeFilters.length > 0;
   const clearFilters = () => {
     setStatus("");
     setCurrency("");
@@ -86,7 +98,7 @@ export default function QuotationsRegisterPage() {
           </div>
           <button
             type="button"
-            className="ti-btn ti-btn-primary shrink-0"
+            className="ti-btn ti-btn-primary shrink-0 w-full sm:w-auto"
             onClick={() => setEditor({ quotation: null })}
             disabled={leads.length === 0}
             title={leads.length === 0 ? "Create a lead first" : undefined}
@@ -95,71 +107,146 @@ export default function QuotationsRegisterPage() {
           </button>
         </div>
 
-        <div className="box custom-box mb-4">
-          <div className="box-body">
-            <div className="grid grid-cols-12 gap-3 items-end">
-              <div className="col-span-12 sm:col-span-4">
-                <label className="form-label text-[0.75rem]">Status</label>
-                <select
-                  className="form-select"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                >
-                  <option value="">All</option>
-                  {QUOTATION_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-span-12 sm:col-span-4">
-                <label className="form-label text-[0.75rem]">Currency</label>
-                <select
-                  className="form-select"
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                >
-                  <option value="">All</option>
-                  {QUOTATION_CURRENCIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-span-12 sm:col-span-4">
-                <label className="form-label text-[0.75rem]">Owner</label>
-                <select
-                  className="form-select"
-                  value={owner}
-                  onChange={(e) => setOwner(e.target.value)}
-                >
-                  <option value="">All</option>
-                  {ownerOptions.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        {/* Mobile: search + filter trigger. Desktop keeps the inline filter card. */}
+        <div className="md:hidden mb-3">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <i
+                className="ri-search-line absolute start-3 top-1/2 -translate-y-1/2 text-textmuted pointer-events-none"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                className="form-control !ps-9 !min-h-[2.75rem]"
+                placeholder="Search quotations…"
+                aria-label="Search quotations"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              className="ti-btn ti-btn-light shrink-0 !min-h-[2.75rem] !mb-0"
+              onClick={() => setFiltersOpen(true)}
+            >
+              <i className="ri-equalizer-line me-1" aria-hidden="true" />
+              Filters
               {filtersActive && (
-                <div className="col-span-12">
-                  <button
-                    type="button"
-                    className="ti-btn ti-btn-sm ti-btn-light"
-                    onClick={clearFilters}
-                  >
-                    <i className="ri-filter-off-line me-1"></i>Clear
-                  </button>
-                </div>
+                <span className="badge bg-primary text-white ms-1">
+                  {activeFilters.length}
+                </span>
               )}
+            </button>
+          </div>
+          {filtersActive && (
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              {activeFilters.map((f) => (
+                <span key={f} className="badge bg-light text-default">
+                  {f}
+                </span>
+              ))}
+              <button
+                type="button"
+                className="text-[0.75rem] text-primary font-medium"
+                onClick={clearFilters}
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop filters. Wrapper carries the breakpoint — `.box` sets its own
+            display:flex, which would beat a `hidden` utility on the same element. */}
+        <div className="hidden md:block">
+          <div className="box custom-box !mb-4">
+            <div className="box-body">
+              <div className="grid grid-cols-12 gap-3 items-end">
+              <QuotationFilterFields
+                idPrefix="qt-desktop"
+                status={status}
+                currency={currency}
+                owner={owner}
+                ownerOptions={ownerOptions}
+                onStatus={setStatus}
+                onCurrency={setCurrency}
+                onOwner={setOwner}
+              />
+                {filtersActive && (
+                  <div className="col-span-12">
+                    <button
+                      type="button"
+                      className="ti-btn ti-btn-sm ti-btn-light"
+                      onClick={clearFilters}
+                    >
+                      <i className="ri-filter-off-line me-1"></i>Clear
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="box custom-box">
-          <div className="box-body p-0">
+        {/* Mobile: one card per quotation, money first. Tap opens the full record. */}
+        <div className="md:hidden">
+          {filtered.length === 0 ? (
+            <div className="box custom-box !mb-0">
+              <div className="box-body text-center !text-textmuted !py-8 text-[0.8125rem]">
+                {quotations.length === 0
+                  ? "No quotations yet. Issue quotes from a lead's detail page."
+                  : "No quotations match this search."}
+              </div>
+            </div>
+          ) : (
+            filtered.map((q) => (
+              <button
+                key={q.id}
+                type="button"
+                className="box custom-box !mb-3 w-full text-start"
+                onClick={() => setDetail(q)}
+              >
+                <div className="box-body !p-4">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <span className="text-[0.6875rem] uppercase tracking-wide text-textmuted">
+                      Quotation {dash(q.quoteNo)}
+                    </span>
+                    <span className="badge bg-light text-default shrink-0">
+                      {q.status}
+                    </span>
+                  </div>
+                  <p className="font-semibold text-[0.875rem] mb-0.5">
+                    {dash(q.companyName)}
+                  </p>
+                  <p className="text-[0.8125rem] text-textmuted mb-3">
+                    {dash(q.product)}
+                  </p>
+                  <p className="text-[0.6875rem] uppercase tracking-wide text-textmuted mb-0.5">
+                    Grand total
+                  </p>
+                  <p className="text-[1.125rem] font-semibold tabular-nums mb-3">
+                    {formatMoney(q.grandTotal, q.currency)}
+                  </p>
+                  <div className="flex items-end justify-between gap-2 text-[0.75rem] text-textmuted">
+                    <span>
+                      {dash(q.owner)}
+                      <br />
+                      Valid until {dash(q.validUntil)}
+                    </span>
+                    <span className="text-primary font-medium whitespace-nowrap">
+                      View details
+                      <i className="ri-arrow-right-line ms-1" aria-hidden="true" />
+                    </span>
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className="hidden md:block">
+          <div className="box custom-box">
+            <div className="box-body !p-0">
             <div className="table-responsive">
               <table className="table ti-custom-table min-w-full mb-0 text-[0.8125rem]">
                 <thead className="ti-custom-table-head">
@@ -231,12 +318,110 @@ export default function QuotationsRegisterPage() {
                       </tr>
                     ))
                   )}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {filtersOpen && (
+        <BottomSheet title="Filters" onClose={() => setFiltersOpen(false)}>
+          <div className="box-body">
+            <div className="grid grid-cols-12 gap-3">
+              <QuotationFilterFields
+                idPrefix="qt-sheet"
+                status={status}
+                currency={currency}
+                owner={owner}
+                ownerOptions={ownerOptions}
+                onStatus={setStatus}
+                onCurrency={setCurrency}
+                onOwner={setOwner}
+              />
+            </div>
+          </div>
+          <div className="box-footer flex gap-2">
+            <button
+              type="button"
+              className="ti-btn ti-btn-light flex-1 !mb-0"
+              onClick={clearFilters}
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              className="ti-btn ti-btn-primary flex-1 !mb-0"
+              onClick={() => setFiltersOpen(false)}
+            >
+              Show {filtered.length} {filtered.length === 1 ? "result" : "results"}
+            </button>
+          </div>
+        </BottomSheet>
+      )}
+
+      {detail && (
+        <BottomSheet
+          title={`Quotation ${dash(detail.quoteNo)}`}
+          onClose={() => setDetail(null)}
+        >
+          <div className="box-body">
+            <p className="font-semibold text-[0.9375rem] mb-4">
+              {dash(detail.companyName)}
+            </p>
+            <dl className="mb-0 divide-y divide-defaultborder dark:divide-white/10">
+              <DetailRow label="Date" value={dash(detail.quoteDate)} />
+              <DetailRow label="Products" value={dash(detail.product)} />
+              <DetailRow
+                label="Sub total"
+                value={formatMoney(detail.subTotal, detail.currency)}
+              />
+              <DetailRow
+                label="GST"
+                value={
+                  detail.gstAmount > 0
+                    ? formatMoney(detail.gstAmount, detail.currency)
+                    : "—"
+                }
+              />
+              <DetailRow
+                label="Grand total"
+                value={formatMoney(detail.grandTotal, detail.currency)}
+                emphasis
+              />
+              <DetailRow label="Basis" value={dash(detail.priceBasis)} />
+              <DetailRow label="Valid until" value={dash(detail.validUntil)} />
+              <DetailRow label="Status" value={detail.status} />
+              <DetailRow label="Owner" value={dash(detail.owner)} />
+            </dl>
+          </div>
+          <div className="box-footer flex gap-2">
+            <button
+              type="button"
+              className="ti-btn ti-btn-light flex-1 !mb-0"
+              onClick={() => {
+                setEditor({ quotation: detail });
+                setDetail(null);
+              }}
+            >
+              <i className="ri-edit-line me-1" aria-hidden="true" />
+              Edit
+            </button>
+            <button
+              type="button"
+              className="ti-btn ti-btn-outline-danger flex-1 !mb-0"
+              onClick={() => {
+                setPendingDelete(detail);
+                setDetail(null);
+              }}
+            >
+              <i className="ri-delete-bin-line me-1" aria-hidden="true" />
+              Delete
+            </button>
+          </div>
+        </BottomSheet>
+      )}
 
       {editor && (
         <QuotationEditorModal
@@ -268,6 +453,111 @@ export default function QuotationsRegisterPage() {
   );
 }
 
+function QuotationFilterFields({
+  idPrefix,
+  status,
+  currency,
+  owner,
+  ownerOptions,
+  onStatus,
+  onCurrency,
+  onOwner,
+}: {
+  idPrefix: string;
+  status: string;
+  currency: string;
+  owner: string;
+  ownerOptions: string[];
+  onStatus: (v: string) => void;
+  onCurrency: (v: string) => void;
+  onOwner: (v: string) => void;
+}) {
+  return (
+    <Fragment>
+      <div className="col-span-12 sm:col-span-4">
+        <label className="form-label text-[0.75rem]" htmlFor={`${idPrefix}-status`}>
+          Status
+        </label>
+        <select
+          id={`${idPrefix}-status`}
+          className="form-select"
+          value={status}
+          onChange={(e) => onStatus(e.target.value)}
+        >
+          <option value="">All</option>
+          {QUOTATION_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="col-span-12 sm:col-span-4">
+        <label className="form-label text-[0.75rem]" htmlFor={`${idPrefix}-currency`}>
+          Currency
+        </label>
+        <select
+          id={`${idPrefix}-currency`}
+          className="form-select"
+          value={currency}
+          onChange={(e) => onCurrency(e.target.value)}
+        >
+          <option value="">All</option>
+          {QUOTATION_CURRENCIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="col-span-12 sm:col-span-4">
+        <label className="form-label text-[0.75rem]" htmlFor={`${idPrefix}-owner`}>
+          Owner
+        </label>
+        <select
+          id={`${idPrefix}-owner`}
+          className="form-select"
+          value={owner}
+          onChange={(e) => onOwner(e.target.value)}
+        >
+          <option value="">All</option>
+          {ownerOptions.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </div>
+    </Fragment>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  emphasis,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2.5">
+      <dt className="text-[0.75rem] text-textmuted shrink-0">{label}</dt>
+      <dd
+        className={`mb-0 text-end ${
+          emphasis
+            ? "text-[0.9375rem] font-semibold tabular-nums"
+            : "text-[0.8125rem]"
+        }`}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+/** Mobile sheet: slides up from the bottom, closes on backdrop tap or Escape. */
 function QuotationEditorModal({
   quotation,
   onClose,
@@ -299,7 +589,7 @@ function QuotationEditorModal({
       onClick={onClose}
     >
       <div
-        className="box custom-box w-full max-w-2xl max-h-[90vh] overflow-y-auto mb-0"
+        className="box custom-box w-full max-w-2xl max-h-[90vh] overflow-y-auto !mb-0"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="box-header flex items-center justify-between">

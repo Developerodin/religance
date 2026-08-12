@@ -41,6 +41,8 @@ type ActiveLeadDetailDrawerProps = {
   lead: CrmLead | null;
   onClose: () => void;
   onSendEmail: (lead: CrmLead) => void;
+  /** Optional — the only route to delete when the list shows cards, not rows. */
+  onDelete?: (lead: CrmLead) => void;
 };
 
 function resolveTimelineEmailId(
@@ -87,6 +89,7 @@ export function ActiveLeadDetailDrawer({
   lead,
   onClose,
   onSendEmail,
+  onDelete,
 }: ActiveLeadDetailDrawerProps) {
   const {
     getLeadEmails,
@@ -424,6 +427,16 @@ export function ActiveLeadDetailDrawer({
           >
             Open full page
           </Link>
+          {onDelete && (
+            <button
+              type="button"
+              className="ti-btn ti-btn-light text-danger"
+              onClick={() => onDelete(lead)}
+            >
+              <i className="ri-delete-bin-line me-1" aria-hidden="true"></i>
+              Delete
+            </button>
+          )}
           <button type="button" className="ti-btn ti-btn-light" onClick={onClose}>
             Close
           </button>

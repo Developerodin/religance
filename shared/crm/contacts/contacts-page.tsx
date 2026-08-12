@@ -129,7 +129,7 @@ export default function ContactsPage() {
     <Fragment>
       <Seo title="Saved Contact" />
       <div className="saved-contacts-page">
-        <div className="box custom-box saved-contacts-shell mb-0">
+        <div className="box custom-box saved-contacts-shell !mb-0">
           <div className="saved-contacts-hero">
             <div className="saved-contacts-hero-text">
               <h2 className="saved-contacts-title">Saved Contact</h2>

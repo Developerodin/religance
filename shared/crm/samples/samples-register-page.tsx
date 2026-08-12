@@ -102,7 +102,7 @@ export default function SamplesRegisterPage() {
           {inField} in field (dispatched / delivered / under evaluation)
         </span>
 
-        <div className="box custom-box mb-4">
+        <div className="box custom-box !mb-4">
           <div className="box-body">
             <div className="grid grid-cols-12 gap-3 items-end">
               <div className="col-span-12 sm:col-span-4">
@@ -166,7 +166,7 @@ export default function SamplesRegisterPage() {
         </div>
 
         <div className="box custom-box">
-          <div className="box-body p-0">
+          <div className="box-body !p-0">
             <div className="table-responsive">
               <table className="table ti-custom-table min-w-full mb-0 text-[0.8125rem]">
                 <thead className="ti-custom-table-head">
