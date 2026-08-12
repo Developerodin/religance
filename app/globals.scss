@@ -3178,6 +3178,11 @@ body:has(.lead-form-page) {
     gap: 0.65rem;
     align-items: end;
 
+    /* Tablet (md–xl): keep search + company + sort on one row when width allows. */
+    @media (max-width: 1199.98px) and (min-width: 768px) {
+      grid-template-columns: 1.2fr 1fr minmax(7.5rem, 9rem);
+    }
+
     @media (max-width: 767.98px) {
       grid-template-columns: 1fr;
     }

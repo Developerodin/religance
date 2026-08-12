@@ -2,7 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 
-/** Mobile-only sheet that slides up from the bottom edge. Hidden at md+. */
+/** Phone + tablet sheet. Hidden at xl+ (desktop uses drawers / inline UI). */
 export function BottomSheet({
   title,
   onClose,
@@ -25,11 +25,11 @@ export function BottomSheet({
 
   return (
     <div
-      className="fixed inset-0 z-[1000] flex items-end bg-black/50 md:hidden motion-safe:animate-backdrop-in"
+      className="fixed inset-0 z-[1000] flex items-end justify-center bg-black/50 xl:hidden md:items-center md:p-4 motion-safe:animate-backdrop-in"
       onClick={onClose}
     >
       <div
-        className="box custom-box !mb-0 w-full max-h-[85vh] overflow-y-auto !rounded-b-none pb-[env(safe-area-inset-bottom)] motion-safe:animate-sheet-up"
+        className="box custom-box !mb-0 w-full max-h-[85vh] overflow-y-auto !rounded-b-none pb-[env(safe-area-inset-bottom)] md:max-w-xl md:!rounded-md md:pb-0 motion-safe:animate-sheet-up"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

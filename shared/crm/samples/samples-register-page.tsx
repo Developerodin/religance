@@ -116,10 +116,10 @@ export default function SamplesRegisterPage() {
           {inField} in field (dispatched / delivered / under evaluation)
         </span>
 
-        {/* Mobile: search + filter trigger. Desktop keeps the inline filter card. */}
-        <div className="md:hidden mb-3">
+        {/* Phone + tablet: search + filter sheet. Desktop keeps the inline filter card. */}
+        <div className="xl:hidden mb-3">
           <div className="flex gap-2">
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <i
                 className="ri-search-line absolute start-3 top-1/2 -translate-y-1/2 text-textmuted pointer-events-none"
                 aria-hidden="true"
@@ -167,7 +167,7 @@ export default function SamplesRegisterPage() {
 
         {/* Desktop filters. Wrapper carries the breakpoint — `.box` sets its own
             display:flex, which would beat a `hidden` utility on the same element. */}
-        <div className="hidden md:block">
+        <div className="hidden xl:block">
           <div className="box custom-box !mb-4">
             <div className="box-body">
               <div className="grid grid-cols-12 gap-3 items-end">
@@ -198,8 +198,8 @@ export default function SamplesRegisterPage() {
           </div>
         </div>
 
-        {/* Mobile: one card per sample — status & feedback first. Tap opens the full record. */}
-        <div className="md:hidden">
+        {/* Phone + tablet cards — denser 2-col meta from md. Tap opens BottomSheet. */}
+        <div className="xl:hidden">
           {filtered.length === 0 ? (
             <div className="box custom-box !mb-0">
               <div className="box-body text-center !text-textmuted !py-8 text-[0.8125rem]">
@@ -218,7 +218,7 @@ export default function SamplesRegisterPage() {
               >
                 <div className="box-body !p-4">
                   <div className="flex items-start justify-between gap-2 mb-1">
-                    <p className="font-semibold text-[0.875rem] mb-0">
+                    <p className="font-semibold text-[0.875rem] mb-0 min-w-0 truncate">
                       {dash(s.companyName)}
                     </p>
                     <span className="badge bg-primary/10 text-primary shrink-0">
@@ -227,9 +227,13 @@ export default function SamplesRegisterPage() {
                   </div>
                   <p className="text-[0.8125rem] text-textmuted mb-2">
                     {dash(s.product)}
-                    {s.qty?.trim() ? ` · Qty ${s.qty}` : ""}
-                    {s.batchNo?.trim() ? ` · Batch ${s.batchNo}` : ""}
                   </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-[0.75rem] text-textmuted mb-3">
+                    <span>Qty {dash(s.qty)}</span>
+                    <span>Batch {dash(s.batchNo)}</span>
+                    <span>Dispatched {dash(s.dispatchDate)}</span>
+                    <span>{dash(s.owner)}</span>
+                  </div>
                   <p className="text-[0.6875rem] uppercase tracking-wide text-textmuted mb-0.5">
                     Feedback
                   </p>
@@ -237,13 +241,7 @@ export default function SamplesRegisterPage() {
                     {dash(s.feedback)}
                   </p>
                   <div className="flex items-end justify-between gap-2 text-[0.75rem] text-textmuted">
-                    <span>
-                      Dispatched {dash(s.dispatchDate)}
-                      <br />
-                      {courierAwb(s)}
-                      <br />
-                      {dash(s.owner)}
-                    </span>
+                    <span className="truncate">{courierAwb(s)}</span>
                     <span className="text-primary font-medium whitespace-nowrap">
                       View details
                       <i className="ri-arrow-right-line ms-1" aria-hidden="true" />
@@ -255,7 +253,7 @@ export default function SamplesRegisterPage() {
           )}
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden xl:block">
           <div className="box custom-box">
             <div className="box-body !p-0">
               <div className="table-responsive">

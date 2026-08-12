@@ -58,10 +58,11 @@ export default function ContactsPage() {
     null
   );
   // Gate overlays so BottomSheet body-lock and the side drawer never fight.
+  // Sheet: phone + tablet (<1200). Drawer: desktop xl+.
   const [viewport, setViewport] = useState<"mobile" | "desktop" | null>(null);
 
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767.98px)");
+    const mq = window.matchMedia("(max-width: 1199.98px)");
     const apply = () => setViewport(mq.matches ? "mobile" : "desktop");
     apply();
     mq.addEventListener("change", apply);
@@ -201,7 +202,7 @@ export default function ContactsPage() {
           </div>
 
           <div className="saved-contacts-toolbar">
-            {/* Mobile: search stays; Company + Sort live in Filters/Sort sheet. */}
+            {/* Phone: search + Filters/Sort sheet. */}
             <div className="md:hidden">
               <div className="flex items-center justify-between gap-2 mb-2 text-[0.75rem] text-textmuted">
                 <span className="saved-contacts-count">
@@ -264,7 +265,7 @@ export default function ContactsPage() {
               )}
             </div>
 
-            {/* Desktop toolbar — unchanged. Wrapper carries the breakpoint. */}
+            {/* Tablet + desktop: search + Company/Sort inline. Cards vs table split at xl. */}
             <div className="hidden md:block">
               <div className="saved-contacts-toolbar-top">
                 <span className="saved-contacts-count">
@@ -374,8 +375,8 @@ export default function ContactsPage() {
             </div>
           ) : (
             <>
-              {/* Mobile: one card per contact. Tap opens details sheet. */}
-              <div className="md:hidden saved-contacts-cards">
+              {/* Phone + tablet cards only. Desktop table is xl+ — never both. */}
+              <div className="xl:hidden saved-contacts-cards">
                 {paginated.map((row) => {
                   const { contact, company } = row;
                   return (
@@ -412,20 +413,22 @@ export default function ContactsPage() {
                         </span>
                       </div>
 
-                      <p className="saved-contacts-card-email">
-                        {dash(contact.email)}
-                      </p>
-                      <p className="saved-contacts-card-company">
-                        <i
-                          className="ri-building-2-line shrink-0"
-                          aria-hidden="true"
-                        />
-                        <span className="truncate">
-                          {dash(company?.name)}
-                          {" · "}
-                          {contactCountry(company)}
-                        </span>
-                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 mb-2">
+                        <p className="saved-contacts-card-email mb-0">
+                          {dash(contact.email)}
+                        </p>
+                        <p className="saved-contacts-card-company mb-0">
+                          <i
+                            className="ri-building-2-line shrink-0"
+                            aria-hidden="true"
+                          />
+                          <span className="truncate">
+                            {dash(company?.name)}
+                            {" · "}
+                            {contactCountry(company)}
+                          </span>
+                        </p>
+                      </div>
 
                       <div className="saved-contacts-card-foot">
                         <span className="saved-contacts-card-date">
@@ -470,7 +473,7 @@ export default function ContactsPage() {
                 })}
               </div>
 
-              <div className="hidden md:block">
+              <div className="hidden xl:block">
                 <div className="table-responsive saved-contacts-table-wrap">
                   <table className="table table-hover ti-custom-table saved-contacts-table mb-0">
                     <thead>
