@@ -1,10 +1,11 @@
 "use client";
 
-import { login, resendVerification } from "@/shared/auth/auth-client";
+import { isAuthed, login, resendVerification } from "@/shared/auth/auth-client";
+import { safeAppRedirect } from "@/shared/auth/safe-redirect";
 import BrandLogo from "@/shared/layout-components/brand-logo/brand-logo";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const fieldClass =
   "form-control form-control-lg w-full !h-11 !rounded-md !text-sm !leading-normal !px-3.5 transition-colors duration-200 focus:!border-primary/60 focus-visible:!ring-2 focus-visible:!ring-primary/25";
@@ -38,6 +39,13 @@ export default function Home() {
 
   const router = useRouter();
 
+  // Restore session from localStorage SoT — skip Sign In if already authed.
+  useEffect(() => {
+    if (!isAuthed()) return;
+    const params = new URLSearchParams(window.location.search);
+    router.replace(safeAppRedirect(params.get("redirect")));
+  }, [router]);
+
   const handleSignIn = async () => {
     if (!email.trim()) {
       setError("Email is required.");
@@ -54,7 +62,8 @@ export default function Home() {
     setUnverified(false);
     try {
       await login(email, password);
-      router.push("/active-leads/");
+      const params = new URLSearchParams(window.location.search);
+      router.push(safeAppRedirect(params.get("redirect")));
     } catch (e: any) {
       // Backend returns 403 "verify your email…" for unverified accounts.
       if (typeof e?.message === "string" && /verify your email/i.test(e.message)) {

@@ -387,7 +387,7 @@ const Header = () => {
 
                   <div className={`border-t border-defaultborder p-4 dark:border-white/10 empty-header-item1 ${notifications.length === 0 ? "hidden" : "block"}`}>
                     {activityTotal > 0 ? (
-                      <Link href="/notifications" className="ti-btn ti-btn-primary-full !m-0 w-full p-2">
+                      <Link href="/notifications/" className="ti-btn ti-btn-primary-full !m-0 w-full p-2">
                         View all
                       </Link>
                     ) : total > 0 ? (
