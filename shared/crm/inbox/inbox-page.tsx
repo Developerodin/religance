@@ -167,6 +167,11 @@ export default function InboxPage() {
     "reply"
   );
   const [forwardTo, setForwardTo] = useState("");
+  const [replyCc, setReplyCc] = useState("");
+  const [replyBcc, setReplyBcc] = useState("");
+  const [replyAttachments, setReplyAttachments] = useState<ComposeAttachment[]>(
+    []
+  );
   const [checkingConnection, setCheckingConnection] = useState(false);
   const [connectingOutlook, setConnectingOutlook] = useState(false);
   const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(
@@ -387,6 +392,9 @@ export default function InboxPage() {
     setSendError(null);
     setReplyMode("reply");
     setForwardTo("");
+    setReplyCc("");
+    setReplyBcc("");
+    setReplyAttachments([]);
   }, [selectedId]);
 
   // Auto-sync on login is owned by the CRM context effect (fires on
@@ -675,14 +683,24 @@ export default function InboxPage() {
     } else {
       const to =
         active.direction === "inbound" ? active.fromEmail : active.toEmail;
+      const attachPayload = replyAttachments.map(
+        ({ name, contentType, contentBytes }) => ({
+          name,
+          contentType,
+          contentBytes,
+        })
+      );
       error = await sendCrmEmail({
         leadId: active.leadId,
         toEmail: to,
+        cc: splitRecipients(replyCc),
+        bcc: splitRecipients(replyBcc),
         subject: active.subject.startsWith("Re:")
           ? active.subject
           : `Re: ${active.subject}`,
         body: replyText,
         bodyIsHtml: true,
+        attachments: attachPayload,
         replyToMessageId: threadable ? replyMessageId : null,
         mode: replyMode,
       });
@@ -695,6 +713,9 @@ export default function InboxPage() {
     }
     setReplyText("");
     setForwardTo("");
+    setReplyCc("");
+    setReplyBcc("");
+    setReplyAttachments([]);
     setReplyMode("reply");
     setSentFlash(true);
   };
@@ -1012,6 +1033,12 @@ export default function InboxPage() {
                   onSendReply={handleSendReply}
                   replyMode={replyMode}
                   onReplyModeChange={setReplyMode}
+                  replyCc={replyCc}
+                  onReplyCcChange={setReplyCc}
+                  replyBcc={replyBcc}
+                  onReplyBccChange={setReplyBcc}
+                  replyAttachments={replyAttachments}
+                  onReplyAttachmentsChange={setReplyAttachments}
                   forwardTo={forwardTo}
                   onForwardToChange={setForwardTo}
                   onDownloadAttachment={handleDownloadAttachment}

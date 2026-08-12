@@ -13,39 +13,18 @@ import { ConfirmDeleteOverlay } from "@/shared/crm/ui/confirm-delete-overlay";
 import Link from "next/link";
 import { Button } from "@/shared/ui/button";
 import { InboxAvatar } from "./inbox-avatar";
+import type { ComposeAttachment } from "./inbox-compose";
+import {
+  FORMAT_ACTIONS,
+  applyFormat as execFormat,
+  collectActiveFormats,
+} from "./inbox-editor-format";
 import { InboxOverflowMenu } from "./inbox-overflow-menu";
 import { parseEmailBody } from "./inbox-utils";
 import type { InboxRowMeta } from "./inbox-list";
 
-// ponytail: same FORMAT_ACTIONS as compose — shared module if a third editor appears
-const FORMAT_ACTIONS: {
-  command: string;
-  icon: string;
-  label: string;
-  stateful: boolean;
-}[] = [
-  { command: "bold", icon: "ri-bold", label: "Bold", stateful: true },
-  { command: "italic", icon: "ri-italic", label: "Italic", stateful: true },
-  { command: "underline", icon: "ri-underline", label: "Underline", stateful: true },
-  {
-    command: "insertUnorderedList",
-    icon: "ri-list-unordered",
-    label: "Bulleted list",
-    stateful: true,
-  },
-  {
-    command: "insertOrderedList",
-    icon: "ri-list-ordered",
-    label: "Numbered list",
-    stateful: true,
-  },
-  {
-    command: "removeFormat",
-    icon: "ri-format-clear",
-    label: "Clear formatting",
-    stateful: false,
-  },
-];
+// Graph sendMail / reply attach cap — keep raw file total under 3MB (match compose).
+const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
 
 function replyPlainText(html: string): string {
   return html
@@ -100,6 +79,12 @@ export function InboxDetailPanel({
   onSendReply,
   replyMode,
   onReplyModeChange,
+  replyCc,
+  onReplyCcChange,
+  replyBcc,
+  onReplyBccChange,
+  replyAttachments,
+  onReplyAttachmentsChange,
   forwardTo,
   onForwardToChange,
   onDownloadAttachment,
@@ -131,6 +116,12 @@ export function InboxDetailPanel({
   onSendReply: () => void;
   replyMode: "reply" | "replyAll" | "forward";
   onReplyModeChange: (mode: "reply" | "replyAll" | "forward") => void;
+  replyCc: string;
+  onReplyCcChange: (v: string) => void;
+  replyBcc: string;
+  onReplyBccChange: (v: string) => void;
+  replyAttachments: ComposeAttachment[];
+  onReplyAttachmentsChange: (attachments: ComposeAttachment[]) => void;
   forwardTo: string;
   onForwardToChange: (v: string) => void;
   onDownloadAttachment: (att: CrmEmailAttachment) => void;
@@ -150,24 +141,33 @@ export function InboxDetailPanel({
   );
   const [pendingUnlink, setPendingUnlink] = useState(false);
   const replyBodyRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
+  const [showCc, setShowCc] = useState(false);
+  const [showBcc, setShowBcc] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => {
     const el = replyBodyRef.current;
     if (el && el.innerHTML !== replyText) el.innerHTML = replyText;
   }, [replyText]);
 
+  useEffect(() => {
+    setShowCc(false);
+    setShowBcc(false);
+    setAttachError(null);
+    setDragOver(false);
+  }, [active.id]);
+
+  // A field with content must never be hidden behind its toggle.
+  useEffect(() => {
+    if (replyCc) setShowCc(true);
+    if (replyBcc) setShowBcc(true);
+  }, [replyCc, replyBcc]);
+
   const refreshFormats = useCallback(() => {
-    const next = new Set<string>();
-    for (const action of FORMAT_ACTIONS) {
-      if (!action.stateful) continue;
-      try {
-        if (document.queryCommandState(action.command)) next.add(action.command);
-      } catch {
-        /* unsupported command — leave inactive */
-      }
-    }
-    setActiveFormats(next);
+    setActiveFormats(collectActiveFormats());
   }, []);
 
   const syncReplyBody = () => {
@@ -198,13 +198,52 @@ export function InboxDetailPanel({
   const showBodyLoading = active.bodyLoaded === false || hydratingBody;
   const canReply = outlookConnected && active.bodyLoaded !== false && !hydratingBody;
   const replyHasText = Boolean(replyPlainText(replyText));
+  const allowReplyExtras = replyMode !== "forward";
 
   const applyFormat = (command: string) => {
     if (!canReply) return;
     replyBodyRef.current?.focus();
-    document.execCommand(command);
+    execFormat(command);
     syncReplyBody();
     refreshFormats();
+  };
+
+  const handleReplyFiles = async (files: FileList | File[] | null) => {
+    if (!allowReplyExtras) return;
+    const list = files ? Array.from(files) : [];
+    if (!list.length) return;
+    setAttachError(null);
+    const next = [...replyAttachments];
+    for (const file of list) {
+      const total = next.reduce((sum, att) => sum + att.size, 0) + file.size;
+      if (total > MAX_ATTACHMENT_BYTES) {
+        setAttachError("Attachments must stay under 3 MB combined.");
+        break;
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      }).catch(() => null);
+      if (!dataUrl) {
+        setAttachError(`Could not read "${file.name}".`);
+        continue;
+      }
+      next.push({
+        name: file.name,
+        contentType: file.type || "application/octet-stream",
+        contentBytes: dataUrl.split(",")[1] ?? "",
+        size: file.size,
+      });
+    }
+    onReplyAttachmentsChange(next);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeReplyAttachment = (index: number) => {
+    setAttachError(null);
+    onReplyAttachmentsChange(replyAttachments.filter((_, i) => i !== index));
   };
 
   return (
@@ -503,6 +542,30 @@ export function InboxDetailPanel({
                   ? "Reply all :"
                   : "Reply :"}
             </span>
+            {allowReplyExtras && (!showCc || !showBcc) && (
+              <span className="crm-inbox-compose-reveals">
+                {!showCc && (
+                  <button
+                    type="button"
+                    className="crm-inbox-compose-reveal"
+                    disabled={!canReply}
+                    onClick={() => setShowCc(true)}
+                  >
+                    Cc
+                  </button>
+                )}
+                {!showBcc && (
+                  <button
+                    type="button"
+                    className="crm-inbox-compose-reveal"
+                    disabled={!canReply}
+                    onClick={() => setShowBcc(true)}
+                  >
+                    Bcc
+                  </button>
+                )}
+              </span>
+            )}
           </div>
           <div
             className="crm-inbox-reply-toolbar"
@@ -540,27 +603,126 @@ export function InboxDetailPanel({
               aria-label="Forward to"
             />
           )}
+          {allowReplyExtras && showCc && (
+            <input
+              type="text"
+              value={replyCc}
+              onChange={(e) => onReplyCcChange(e.target.value)}
+              disabled={!canReply}
+              placeholder="Cc — separate addresses with commas"
+              className="crm-inbox-reply-input crm-inbox-reply-forward-to"
+              aria-label="Cc"
+              autoFocus={!replyCc}
+            />
+          )}
+          {allowReplyExtras && showBcc && (
+            <input
+              type="text"
+              value={replyBcc}
+              onChange={(e) => onReplyBccChange(e.target.value)}
+              disabled={!canReply}
+              placeholder="Bcc — separate addresses with commas"
+              className="crm-inbox-reply-input crm-inbox-reply-forward-to"
+              aria-label="Bcc"
+              autoFocus={!replyBcc}
+            />
+          )}
           <div
-            ref={replyBodyRef}
-            className="crm-inbox-reply-input crm-inbox-reply-editor"
-            contentEditable={canReply}
-            role="textbox"
-            aria-multiline="true"
-            aria-label={
-              replyMode === "forward" ? "Forward note" : "Reply message"
-            }
-            data-placeholder={
-              replyMode === "forward"
-                ? "Add a note (optional)…"
-                : `Write your reply to ${meta.from}…`
-            }
-            onInput={syncReplyBody}
-            onBlur={syncReplyBody}
-            onKeyUp={refreshFormats}
-            onMouseUp={refreshFormats}
-            onFocus={refreshFormats}
-          />
+            className={`crm-inbox-reply-editor-wrap${dragOver ? " is-dragover" : ""}`}
+            onDragOver={(e) => {
+              if (!allowReplyExtras || !canReply) return;
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              if (!allowReplyExtras || !canReply) return;
+              e.preventDefault();
+              setDragOver(false);
+              void handleReplyFiles(e.dataTransfer.files);
+            }}
+          >
+            <div
+              ref={replyBodyRef}
+              className="crm-inbox-reply-input crm-inbox-reply-editor"
+              contentEditable={canReply}
+              role="textbox"
+              aria-multiline="true"
+              aria-label={
+                replyMode === "forward" ? "Forward note" : "Reply message"
+              }
+              data-placeholder={
+                replyMode === "forward"
+                  ? "Add a note (optional)…"
+                  : `Write your reply to ${meta.from}…`
+              }
+              onInput={syncReplyBody}
+              onBlur={syncReplyBody}
+              onKeyUp={refreshFormats}
+              onMouseUp={refreshFormats}
+              onFocus={refreshFormats}
+            />
+            {allowReplyExtras && replyAttachments.length > 0 && (
+              <div className="crm-inbox-compose-attachments">
+                {replyAttachments.map((att, index) => (
+                  <span
+                    key={`${att.name}-${index}`}
+                    className="crm-inbox-compose-attachment"
+                  >
+                    <i className="ri-attachment-2" aria-hidden />
+                    <span className="crm-inbox-compose-attachment-name">
+                      {att.name}
+                    </span>
+                    <span className="crm-inbox-compose-attachment-size">
+                      {formatAttachmentSize(att.size)}
+                    </span>
+                    <button
+                      type="button"
+                      className="crm-inbox-compose-attachment-remove"
+                      onClick={() => removeReplyAttachment(index)}
+                      aria-label={`Remove ${att.name}`}
+                    >
+                      <i className="ri-close-line" aria-hidden />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {dragOver && (
+              <div className="crm-inbox-compose-drop-hint" aria-hidden>
+                <i className="ri-attachment-2" /> Drop files to attach
+              </div>
+            )}
+          </div>
+          {attachError && (
+            <p className="crm-inbox-compose-attach-error" role="alert">
+              {attachError}
+            </p>
+          )}
           <div className="crm-inbox-reply-actions">
+            <div className="crm-inbox-reply-actions-left">
+              {allowReplyExtras && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    hidden
+                    onChange={(e) => void handleReplyFiles(e.target.files)}
+                  />
+                  <button
+                    type="button"
+                    className="crm-inbox-btn-attach"
+                    disabled={!canReply || sending}
+                    onClick={() => fileInputRef.current?.click()}
+                    aria-label="Attach files"
+                  >
+                    <i className="ri-attachment-2" aria-hidden />
+                    Attach
+                  </button>
+                </>
+              )}
+            </div>
             <div className="crm-inbox-reply-actions-right">
               <button
                 type="button"

@@ -1186,6 +1186,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.65rem 0.85rem 0.35rem;
+    flex-wrap: wrap;
   }
 
   .crm-inbox-reply-label {
@@ -1287,18 +1288,160 @@
     ol { list-style: decimal; }
   }
 
+  .crm-inbox-reply-editor-wrap {
+    position: relative;
+
+    &.is-dragover {
+      outline: 1px dashed var(--inbox-purple, #8b5cf6);
+      outline-offset: -2px;
+    }
+  }
+
   .crm-inbox-reply-actions {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
+    gap: 0.5rem;
     padding: 0.55rem 0.85rem 0.7rem;
     border-top: 1px solid var(--inbox-border);
   }
 
+  .crm-inbox-reply-actions-left,
   .crm-inbox-reply-actions-right {
     display: flex;
     align-items: center;
     gap: 0.35rem;
+  }
+
+  .crm-inbox-btn-attach {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.48rem 0.85rem;
+    border: none;
+    border-radius: 0.4rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--inbox-muted);
+    background: transparent;
+
+    &:hover:not(:disabled) {
+      color: var(--inbox-text);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+
+  /* Lift compose chip/reveal styles into reply (compose classes are modal-scoped). */
+  .crm-inbox-reply-card {
+    .crm-inbox-compose-reveals {
+      display: inline-flex;
+      gap: 0.125rem;
+      margin-inline-start: auto;
+    }
+
+    .crm-inbox-compose-reveal {
+      border: none;
+      background: transparent;
+      padding: 0.25rem 0.45rem;
+      border-radius: 0.3rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--inbox-muted);
+      cursor: pointer;
+
+      &:hover:not(:disabled) {
+        background: rgba(139, 92, 246, 0.14);
+        color: var(--inbox-text);
+      }
+
+      &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+    }
+
+    .crm-inbox-compose-attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.55rem 0.85rem;
+      border-top: 1px solid var(--inbox-border);
+      background: var(--inbox-surface-3);
+    }
+
+    .crm-inbox-compose-attachment {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      max-width: 100%;
+      padding: 0.35rem 0.4rem 0.35rem 0.65rem;
+      border: 1px solid var(--inbox-border);
+      border-radius: 999px;
+      font-size: 0.8125rem;
+      color: var(--inbox-text);
+      background: var(--inbox-surface-2);
+
+      i {
+        color: var(--inbox-muted);
+      }
+    }
+
+    .crm-inbox-compose-attachment-name {
+      max-width: 14rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .crm-inbox-compose-attachment-size {
+      color: var(--inbox-muted);
+      flex-shrink: 0;
+    }
+
+    .crm-inbox-compose-attachment-remove {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.35rem;
+      height: 1.35rem;
+      border: none;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--inbox-muted);
+      cursor: pointer;
+
+      &:hover {
+        background: rgba(239, 68, 68, 0.15);
+        color: #fca5a5;
+      }
+    }
+
+    .crm-inbox-compose-drop-hint {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--inbox-purple);
+      background: rgba(139, 92, 246, 0.12);
+      pointer-events: none;
+    }
+
+    .crm-inbox-compose-attach-error {
+      margin: 0;
+      padding: 0.35rem 0.85rem 0.5rem;
+      font-size: 0.8125rem;
+      color: #fca5a5;
+      background: var(--inbox-surface-3);
+    }
   }
 
   .crm-inbox-btn-forward {

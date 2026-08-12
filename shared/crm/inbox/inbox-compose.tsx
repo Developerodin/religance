@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  FORMAT_ACTIONS,
+  applyFormat as execFormat,
+  collectActiveFormats,
+} from "./inbox-editor-format";
 
 type ComposeDraft = {
   to: string;
@@ -20,15 +25,6 @@ export type ComposeAttachment = {
 
 // Graph sendMail request cap is ~4MB; keep raw file total under 3MB.
 const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
-
-const FORMAT_ACTIONS: { command: string; icon: string; label: string; stateful: boolean }[] = [
-  { command: "bold", icon: "ri-bold", label: "Bold", stateful: true },
-  { command: "italic", icon: "ri-italic", label: "Italic", stateful: true },
-  { command: "underline", icon: "ri-underline", label: "Underline", stateful: true },
-  { command: "insertUnorderedList", icon: "ri-list-unordered", label: "Bulleted list", stateful: true },
-  { command: "insertOrderedList", icon: "ri-list-ordered", label: "Numbered list", stateful: true },
-  { command: "removeFormat", icon: "ri-format-clear", label: "Clear formatting", stateful: false },
-];
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -116,16 +112,7 @@ export function InboxCompose({
   }, [open, draft.body]);
 
   const refreshFormats = useCallback(() => {
-    const next = new Set<string>();
-    for (const action of FORMAT_ACTIONS) {
-      if (!action.stateful) continue;
-      try {
-        if (document.queryCommandState(action.command)) next.add(action.command);
-      } catch {
-        /* unsupported command — leave inactive */
-      }
-    }
-    setActiveFormats(next);
+    setActiveFormats(collectActiveFormats());
   }, []);
 
   if (!open) return null;
@@ -143,7 +130,7 @@ export function InboxCompose({
 
   const applyFormat = (command: string) => {
     bodyRef.current?.focus();
-    document.execCommand(command);
+    execFormat(command);
     syncBody();
     refreshFormats();
   };

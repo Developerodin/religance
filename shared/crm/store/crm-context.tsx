@@ -136,7 +136,7 @@ export type SendCrmEmailInput = {
   body: string;
   /** body is already HTML (rich compose editor) — skip newline→<br/> conversion. */
   bodyIsHtml?: boolean;
-  /** base64-encoded file attachments. Compose (new message) only. */
+  /** base64-encoded file attachments (compose + reply / reply-all). */
   attachments?: { name: string; contentType: string; contentBytes: string }[];
   /** Outlook message id to thread against. Only synced emails have one. */
   replyToMessageId?: string | null;
@@ -2282,13 +2282,18 @@ export function CrmProvider({ children }: { children: ReactNode }) {
         : input.body.replace(/\n/g, "<br/>");
       const messageId = input.replyToMessageId ?? null;
       const accountId = state.outlookAccountId;
+      const replyExtras = {
+        cc: input.cc,
+        bcc: input.bcc,
+        attachments: input.attachments,
+      };
       const sent =
         messageId && input.mode === "forward"
           ? await forwardOutlookMessage({ accountId, messageId, to: input.toEmail, html })
           : messageId && input.mode === "replyAll"
-            ? await replyAllOutlookMessage({ accountId, messageId, html })
+            ? await replyAllOutlookMessage({ accountId, messageId, html, ...replyExtras })
             : messageId && input.mode === "reply"
-              ? await replyOutlookMessage({ accountId, messageId, html })
+              ? await replyOutlookMessage({ accountId, messageId, html, ...replyExtras })
               : await sendOutlookMessage({
                   accountId,
                   to: input.toEmail,

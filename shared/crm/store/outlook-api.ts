@@ -171,11 +171,20 @@ export async function replyOutlookMessage(input: {
   accountId: string;
   messageId: string;
   html: string;
+  cc?: string[];
+  bcc?: string[];
+  attachments?: { name: string; contentType: string; contentBytes: string }[];
 }): Promise<JsonResult<{ id: string | null; threadId?: string | null }>> {
   return apiSend(
     "POST",
     `/v1/email/messages/${encodeURIComponent(input.messageId)}/reply`,
-    { accountId: input.accountId, html: input.html }
+    {
+      accountId: input.accountId,
+      html: input.html,
+      cc: input.cc,
+      bcc: input.bcc,
+      attachments: input.attachments,
+    }
   );
 }
 
@@ -183,11 +192,20 @@ export async function replyAllOutlookMessage(input: {
   accountId: string;
   messageId: string;
   html: string;
+  cc?: string[];
+  bcc?: string[];
+  attachments?: { name: string; contentType: string; contentBytes: string }[];
 }): Promise<JsonResult<{ id: string | null; threadId?: string | null }>> {
   return apiSend(
     "POST",
     `/v1/email/messages/${encodeURIComponent(input.messageId)}/reply-all`,
-    { accountId: input.accountId, html: input.html }
+    {
+      accountId: input.accountId,
+      html: input.html,
+      cc: input.cc,
+      bcc: input.bcc,
+      attachments: input.attachments,
+    }
   );
 }
 
