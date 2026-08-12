@@ -39,32 +39,3 @@ export const INBOX_LABELS: {
   { name: "lead", label: "Work", bagClass: "bag-green" },
   { name: "unlinked", label: "Friends", bagClass: "bag-yellow" },
 ];
-
-export const REPLY_TOOLBAR_GROUPS = [
-  {
-    type: "select" as const,
-    options: ["Normal", "Heading", "Subheading"],
-  },
-  {
-    type: "select" as const,
-    options: ["Sans Serif", "Serif", "Mono"],
-  },
-  {
-    type: "icons" as const,
-    icons: [
-      "ri-bold",
-      "ri-italic",
-      "ri-underline",
-      "ri-strikethrough",
-      "ri-double-quotes-l",
-      "ri-code-s-slash-line",
-      "ri-h-1",
-      "ri-h-2",
-      "ri-list-unordered",
-      "ri-list-ordered",
-      "ri-align-left",
-      "ri-link",
-      "ri-image-line",
-    ],
-  },
-] as const;

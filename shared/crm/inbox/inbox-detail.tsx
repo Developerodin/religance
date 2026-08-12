@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { companyInitials } from "@/shared/crm/active-leads/active-leads-utils";
 import LeadStageBadge from "@/shared/crm/active-leads/lead-stage-badge";
 import type {
@@ -13,10 +13,46 @@ import { ConfirmDeleteOverlay } from "@/shared/crm/ui/confirm-delete-overlay";
 import Link from "next/link";
 import { Button } from "@/shared/ui/button";
 import { InboxAvatar } from "./inbox-avatar";
-import { REPLY_TOOLBAR_GROUPS } from "./inbox-constants";
 import { InboxOverflowMenu } from "./inbox-overflow-menu";
 import { parseEmailBody } from "./inbox-utils";
 import type { InboxRowMeta } from "./inbox-list";
+
+// ponytail: same FORMAT_ACTIONS as compose — shared module if a third editor appears
+const FORMAT_ACTIONS: {
+  command: string;
+  icon: string;
+  label: string;
+  stateful: boolean;
+}[] = [
+  { command: "bold", icon: "ri-bold", label: "Bold", stateful: true },
+  { command: "italic", icon: "ri-italic", label: "Italic", stateful: true },
+  { command: "underline", icon: "ri-underline", label: "Underline", stateful: true },
+  {
+    command: "insertUnorderedList",
+    icon: "ri-list-unordered",
+    label: "Bulleted list",
+    stateful: true,
+  },
+  {
+    command: "insertOrderedList",
+    icon: "ri-list-ordered",
+    label: "Numbered list",
+    stateful: true,
+  },
+  {
+    command: "removeFormat",
+    icon: "ri-format-clear",
+    label: "Clear formatting",
+    stateful: false,
+  },
+];
+
+function replyPlainText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .trim();
+}
 
 function formatAttachmentSize(bytes: number): string {
   if (!bytes) return "";
@@ -113,6 +149,30 @@ export function InboxDetailPanel({
     null
   );
   const [pendingUnlink, setPendingUnlink] = useState(false);
+  const replyBodyRef = useRef<HTMLDivElement>(null);
+  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const el = replyBodyRef.current;
+    if (el && el.innerHTML !== replyText) el.innerHTML = replyText;
+  }, [replyText]);
+
+  const refreshFormats = useCallback(() => {
+    const next = new Set<string>();
+    for (const action of FORMAT_ACTIONS) {
+      if (!action.stateful) continue;
+      try {
+        if (document.queryCommandState(action.command)) next.add(action.command);
+      } catch {
+        /* unsupported command — leave inactive */
+      }
+    }
+    setActiveFormats(next);
+  }, []);
+
+  const syncReplyBody = () => {
+    onReplyChange(replyBodyRef.current?.innerHTML ?? "");
+  };
 
   const pendingLinkLead = pendingLinkLeadId
     ? leads.find((l) => l.id === pendingLinkLeadId) ?? null
@@ -137,6 +197,15 @@ export function InboxDetailPanel({
   const attachmentsTotal = attachments.reduce((sum, a) => sum + (a.size || 0), 0);
   const showBodyLoading = active.bodyLoaded === false || hydratingBody;
   const canReply = outlookConnected && active.bodyLoaded !== false && !hydratingBody;
+  const replyHasText = Boolean(replyPlainText(replyText));
+
+  const applyFormat = (command: string) => {
+    if (!canReply) return;
+    replyBodyRef.current?.focus();
+    document.execCommand(command);
+    syncReplyBody();
+    refreshFormats();
+  };
 
   return (
     <section className="crm-inbox-detail">
@@ -427,9 +496,6 @@ export function InboxDetailPanel({
         )}
         <div className="crm-inbox-reply-card">
           <div className="crm-inbox-reply-label-row">
-            <button type="button" className="crm-inbox-toolbar-btn" aria-label="Back">
-              <i className="ri-arrow-left-line"></i>
-            </button>
             <span className="crm-inbox-reply-label">
               {replyMode === "forward"
                 ? "Forward :"
@@ -438,31 +504,30 @@ export function InboxDetailPanel({
                   : "Reply :"}
             </span>
           </div>
-          <div className="crm-inbox-reply-toolbar">
-            {REPLY_TOOLBAR_GROUPS.map((group, gi) =>
-              group.type === "select" ? (
-                <select
-                  key={gi}
-                  className="crm-inbox-toolbar-select"
-                  defaultValue={group.options[0]}
-                  aria-label="Text style"
-                >
-                  {group.options.map((opt) => (
-                    <option key={opt}>{opt}</option>
-                  ))}
-                </select>
-              ) : (
-                group.icons.map((icon) => (
-                  <button
-                    key={icon}
-                    type="button"
-                    className="crm-inbox-toolbar-btn"
-                  >
-                    <i className={icon}></i>
-                  </button>
-                ))
-              )
-            )}
+          <div
+            className="crm-inbox-reply-toolbar"
+            role="toolbar"
+            aria-label="Formatting"
+          >
+            {FORMAT_ACTIONS.map((action) => (
+              <button
+                key={action.command}
+                type="button"
+                className={`crm-inbox-toolbar-btn${
+                  activeFormats.has(action.command) ? " is-active" : ""
+                }`}
+                title={action.label}
+                aria-label={action.label}
+                aria-pressed={
+                  action.stateful ? activeFormats.has(action.command) : undefined
+                }
+                disabled={!canReply}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => applyFormat(action.command)}
+              >
+                <i className={action.icon} aria-hidden />
+              </button>
+            ))}
           </div>
           {replyMode === "forward" && (
             <input
@@ -471,34 +536,31 @@ export function InboxDetailPanel({
               onChange={(e) => onForwardToChange(e.target.value)}
               disabled={!canReply}
               placeholder="Forward to (email address)"
-              className="crm-inbox-reply-input"
+              className="crm-inbox-reply-input crm-inbox-reply-forward-to"
               aria-label="Forward to"
             />
           )}
-          <textarea
-            value={replyText}
-            onChange={(e) => onReplyChange(e.target.value)}
-            disabled={!canReply}
-            placeholder={
+          <div
+            ref={replyBodyRef}
+            className="crm-inbox-reply-input crm-inbox-reply-editor"
+            contentEditable={canReply}
+            role="textbox"
+            aria-multiline="true"
+            aria-label={
+              replyMode === "forward" ? "Forward note" : "Reply message"
+            }
+            data-placeholder={
               replyMode === "forward"
                 ? "Add a note (optional)…"
                 : `Write your reply to ${meta.from}…`
             }
-            className="crm-inbox-reply-input"
-            rows={6}
+            onInput={syncReplyBody}
+            onBlur={syncReplyBody}
+            onKeyUp={refreshFormats}
+            onMouseUp={refreshFormats}
+            onFocus={refreshFormats}
           />
           <div className="crm-inbox-reply-actions">
-            <div className="crm-inbox-reply-actions-left">
-              <button type="button" className="crm-inbox-toolbar-btn">
-                <i className="ri-printer-line"></i>
-              </button>
-              <button type="button" className="crm-inbox-toolbar-btn">
-                <i className="ri-folder-transfer-line"></i>
-              </button>
-              <button type="button" className="crm-inbox-toolbar-btn">
-                <i className="ri-refresh-line"></i>
-              </button>
-            </div>
             <div className="crm-inbox-reply-actions-right">
               <button
                 type="button"
@@ -519,7 +581,7 @@ export function InboxDetailPanel({
                   sending ||
                   (replyMode === "forward"
                     ? !forwardTo.trim()
-                    : !replyText.trim())
+                    : !replyHasText)
                 }
                 onClick={onSendReply}
               >

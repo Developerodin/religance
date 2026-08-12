@@ -1225,10 +1225,21 @@
     background: transparent;
     color: var(--inbox-muted);
     font-size: 0.95rem;
+    cursor: pointer;
 
-    &:hover {
+    &:hover:not(:disabled) {
       background: rgba(255, 255, 255, 0.06);
       color: var(--inbox-text);
+    }
+
+    &.is-active {
+      background: rgba(139, 92, 246, 0.22);
+      color: var(--inbox-purple);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
   }
 
@@ -1249,15 +1260,41 @@
     }
   }
 
+  .crm-inbox-reply-forward-to {
+    min-height: 0;
+    border-bottom: 1px solid var(--inbox-border);
+    resize: none;
+  }
+
+  .crm-inbox-reply-editor {
+    resize: none;
+    overflow-y: auto;
+    max-height: 16rem;
+    cursor: text;
+
+    &:empty::before {
+      content: attr(data-placeholder);
+      color: var(--inbox-muted);
+      pointer-events: none;
+    }
+
+    ul,
+    ol {
+      margin: 0.25rem 0;
+      padding-inline-start: 1.5rem;
+    }
+    ul { list-style: disc; }
+    ol { list-style: decimal; }
+  }
+
   .crm-inbox-reply-actions {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     padding: 0.55rem 0.85rem 0.7rem;
     border-top: 1px solid var(--inbox-border);
   }
 
-  .crm-inbox-reply-actions-left,
   .crm-inbox-reply-actions-right {
     display: flex;
     align-items: center;

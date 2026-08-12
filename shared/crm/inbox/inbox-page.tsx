@@ -638,7 +638,11 @@ export default function InboxPage() {
   const handleSendReply = async () => {
     if (!active) return;
     const isForward = replyMode === "forward";
-    if (isForward ? !forwardTo.trim() : !replyText.trim()) return;
+    const replyPlain = replyText
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .trim();
+    if (isForward ? !forwardTo.trim() : !replyPlain) return;
 
     // Synced Outlook mail uses a stable thread id; messageId is the Graph id
     // needed for reply/forward/attachment APIs.
@@ -653,14 +657,10 @@ export default function InboxPage() {
       // Without a message id the backend can't quote the original for us,
       // so include it in the composed body.
       const body = threadable
-        ? replyText.trim()
-        : [
-            replyText.trim(),
-            "---------- Forwarded message ---------",
-            active.body,
-          ]
+        ? replyText
+        : [replyText, "<p>---------- Forwarded message ---------</p>", active.body]
             .filter(Boolean)
-            .join("\n\n");
+            .join("");
       error = await sendCrmEmail({
         leadId: active.leadId,
         toEmail: forwardTo.trim(),
@@ -668,6 +668,7 @@ export default function InboxPage() {
           ? active.subject
           : `Fwd: ${active.subject}`,
         body,
+        bodyIsHtml: true,
         replyToMessageId: threadable ? replyMessageId : null,
         mode: "forward",
       });
@@ -680,7 +681,8 @@ export default function InboxPage() {
         subject: active.subject.startsWith("Re:")
           ? active.subject
           : `Re: ${active.subject}`,
-        body: replyText.trim(),
+        body: replyText,
+        bodyIsHtml: true,
         replyToMessageId: threadable ? replyMessageId : null,
         mode: replyMode,
       });
