@@ -34,6 +34,7 @@ export const MenuItems: any = [
   linkItem("Samples", "/samples", "bx-package"),
   linkItem("Quotations", "/quotations", "bx-file"),
   linkItem("Inbox", "/inbox", "bx-envelope"),
+  linkItem("Mail assistant", "/mail-assistant", "bx-bot"),
   linkItem("Saved Contact", "/contacts", "bx-id-card"),
   linkItem("Reports", "/reports", "bx-bar-chart-alt-2"),
 
