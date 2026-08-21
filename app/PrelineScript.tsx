@@ -84,6 +84,11 @@ function safeAutoInit() {
   }
 }
 
+function shouldSkipAutoInit(pathname: string | null): boolean {
+  if (!pathname) return true;
+  return pathname.startsWith("/mail-assistant");
+}
+
 export default function PrelineScript() {
   const path = usePathname();
   const loadedRef = useRef(false);
@@ -98,7 +103,7 @@ export default function PrelineScript() {
         loadedRef.current = true;
       }
 
-      if (cancelled) return;
+      if (cancelled || shouldSkipAutoInit(path)) return;
 
       // Wait for React to commit route DOM before Preline scans the page.
       requestAnimationFrame(() => {

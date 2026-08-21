@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { Button } from "@/shared/ui/button";
+
 import { getMailLink, listMailHistory } from "./mail-workflow-api";
 import type { MailHistoryContact, MailHistoryEvent, RecipientSendStatus } from "./types";
 
@@ -204,7 +206,13 @@ function ContactCard({
   );
 }
 
-export default function MailHistoryPanel({ refreshKey = 0 }: { refreshKey?: number }) {
+export default function MailHistoryPanel({
+  refreshKey = 0,
+  embedded = false,
+}: {
+  refreshKey?: number;
+  embedded?: boolean;
+}) {
   const [contacts, setContacts] = useState<MailHistoryContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -267,25 +275,33 @@ export default function MailHistoryPanel({ refreshKey = 0 }: { refreshKey?: numb
   );
 
   return (
-    <div className="box custom-box !mb-0">
-      <div className="box-header flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h6 className="box-title mb-0 before:!hidden">Mail history</h6>
-          <p className="text-[0.75rem] text-textmuted mb-0 mt-1">
-            Every send, grouped by the person contacted.
-          </p>
+    <div className={embedded ? undefined : "box custom-box !mb-0"}>
+      {embedded ? (
+        <div className="mail-assistant-panel-toolbar">
+          <Button variant="light" size="sm" onClick={() => void load()} disabled={loading}>
+            {loading ? "Refreshing…" : "Refresh"}
+          </Button>
         </div>
-        <button
-          type="button"
-          className="ti-btn ti-btn-sm ti-btn-light !mb-0"
-          onClick={() => void load()}
-          disabled={loading}
-        >
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
-      </div>
+      ) : (
+        <div className="box-header flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h6 className="box-title mb-0 before:!hidden">Mail history</h6>
+            <p className="text-[0.75rem] text-textmuted mb-0 mt-1">
+              Every send, grouped by the person contacted.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="ti-btn ti-btn-sm ti-btn-light !mb-0"
+            onClick={() => void load()}
+            disabled={loading}
+          >
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+      )}
 
-      <div className="box-body space-y-3">
+      <div className={embedded ? "space-y-3" : "box-body space-y-3"}>
         <input
           type="search"
           className="form-control form-control-sm"

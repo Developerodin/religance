@@ -30,6 +30,34 @@ import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+type MailAssistantView = "assistant" | "progress" | "history";
+
+const MAIL_VIEWS: ReadonlyArray<{
+  id: MailAssistantView;
+  label: string;
+  icon: string;
+  subtitle: string;
+}> = [
+  {
+    id: "assistant",
+    label: "Assistant",
+    icon: "ri-chat-3-line",
+    subtitle: "Describe a recurring or one-time email in plain language.",
+  },
+  {
+    id: "progress",
+    label: "Progress",
+    icon: "ri-time-line",
+    subtitle: "Active sequences and repeating mail — sent, pending, and next up.",
+  },
+  {
+    id: "history",
+    label: "History",
+    icon: "ri-mail-line",
+    subtitle: "Every send, grouped by the person contacted.",
+  },
+];
+
 type ChatRetryPayload = {
   text: string;
   confirm?: ChatConfirm;
@@ -366,10 +394,12 @@ export default function MailAssistantPage() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   /** Bumped after a confirmed send so the timeline refetches. */
   const [historyKey, setHistoryKey] = useState(0);
+  const [view, setView] = useState<MailAssistantView>("assistant");
   const [slashHighlight, setSlashHighlight] = useState(0);
   const [slashPickerSuppressed, setSlashPickerSuppressed] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const inflightRequestRef = useRef(false);
   const stickToBottomRef = useRef(true);
 
@@ -648,6 +678,8 @@ export default function MailAssistantPage() {
     // A confirm is the only thing that actually puts mail in flight, so this is the
     // one place the timeline needs to refetch.
     setHistoryKey((k) => k + 1);
+    setView("progress");
+    requestAnimationFrame(() => panelRef.current?.focus());
 
     // Drop the spent preview card and append whatever the server actually decided.
     setMessages((prev) => {
@@ -719,24 +751,80 @@ export default function MailAssistantPage() {
 
   const canClear = messages.length > 0 && !busy;
 
+  const activeView = MAIL_VIEWS.find((v) => v.id === view) ?? MAIL_VIEWS[0];
+
+  const selectView = useCallback((next: MailAssistantView) => {
+    setView(next);
+    requestAnimationFrame(() => panelRef.current?.focus());
+  }, []);
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const idx = MAIL_VIEWS.findIndex((v) => v.id === view);
+    if (idx < 0) return;
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+      e.preventDefault();
+      const delta = e.key === "ArrowRight" ? 1 : -1;
+      selectView(MAIL_VIEWS[(idx + delta + MAIL_VIEWS.length) % MAIL_VIEWS.length].id);
+      return;
+    }
+    if (e.key === "Home") {
+      e.preventDefault();
+      selectView(MAIL_VIEWS[0].id);
+      return;
+    }
+    if (e.key === "End") {
+      e.preventDefault();
+      selectView(MAIL_VIEWS[MAIL_VIEWS.length - 1].id);
+    }
+  };
+
   return (
     <Fragment>
       <Seo title="Mail assistant" />
 
-      <div className="grid grid-cols-12 gap-6">
-      <div className="col-span-12 xl:col-span-8 box custom-box !mb-0 flex flex-col min-h-[calc(100vh-10rem)]">
-        <div className="box-header">
-          <div>
-            <h5 className="box-title mb-0 before:!hidden">Mail assistant</h5>
-            <p className="text-[0.75rem] text-textmuted mb-0 mt-1">
-              Describe a recurring or one-time email in plain language.
-            </p>
+      <div className="mail-assistant-page box custom-box !mb-0">
+        <div className="mail-assistant-toolbar">
+          <div className="mail-assistant-toolbar__head">
+            <h5 className="mail-assistant-toolbar__title mb-0">Mail assistant</h5>
+            <p className="mail-assistant-toolbar__subtitle mb-0">{activeView.subtitle}</p>
+          </div>
+          <div
+            className="mail-assistant-segmented"
+            role="tablist"
+            aria-label="Mail assistant views"
+            onKeyDown={handleTabKeyDown}
+          >
+            {MAIL_VIEWS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`mail-assistant-tab-${tab.id}`}
+                aria-selected={view === tab.id}
+                aria-controls={`mail-assistant-panel-${tab.id}`}
+                tabIndex={view === tab.id ? 0 : -1}
+                className={`mail-assistant-segment${view === tab.id ? " is-active" : ""}`}
+                onClick={() => selectView(tab.id)}
+              >
+                <i className={tab.icon} aria-hidden="true" />
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
 
+        <div ref={panelRef} tabIndex={-1} className="mail-assistant-panels outline-none">
+          <div
+            role="tabpanel"
+            id="mail-assistant-panel-assistant"
+            aria-labelledby="mail-assistant-tab-assistant"
+            hidden={view !== "assistant"}
+            className="mail-assistant-panel mail-assistant-panel--chat"
+          >
+            <div className="mail-assistant-chat">
         <div
           ref={listRef}
-          className="box-body flex-1 overflow-y-auto min-h-[20rem] space-y-4"
+          className="mail-assistant-chat__messages px-4 py-4 space-y-4"
           aria-live="polite"
         >
           {loading ? (
@@ -926,9 +1014,9 @@ export default function MailAssistantPage() {
           })}
         </div>
 
-        <div className="box-footer border-t border-defaultborder dark:border-defaultborder/10">
+        <div className="mail-assistant-chat__composer border-t border-defaultborder dark:border-defaultborder/10 px-3 sm:px-4 py-3">
           <form onSubmit={handleFormSubmit} className="space-y-2">
-            <div className="flex items-end gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <div className="relative flex-1">
                 <SlashCommandPicker
                   input={input}
@@ -956,7 +1044,7 @@ export default function MailAssistantPage() {
               </div>
               <button
                 type="button"
-                className="ti-btn ti-btn-light !py-2 !px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0 shrink-0 !min-h-[2.75rem] cursor-pointer disabled:cursor-not-allowed"
+                className="ti-btn ti-btn-light !py-2 !px-3 !text-[0.8125rem] !w-full sm:!w-auto !h-auto !mb-0 shrink-0 !min-h-[2.75rem] cursor-pointer disabled:cursor-not-allowed"
                 onClick={() => void handleClearChat()}
                 disabled={!canClear}
                 aria-label="Clear chat"
@@ -965,7 +1053,7 @@ export default function MailAssistantPage() {
               </button>
               <button
                 type="submit"
-                className="ti-btn ti-btn-primary !py-2 !px-4 !text-[0.8125rem] !w-auto !h-auto !mb-0 shrink-0 !min-h-[2.75rem] cursor-pointer disabled:cursor-not-allowed"
+                className="ti-btn ti-btn-primary !py-2 !px-4 !text-[0.8125rem] !w-full sm:!w-auto !h-auto !mb-0 shrink-0 !min-h-[2.75rem] cursor-pointer disabled:cursor-not-allowed"
                 disabled={busy || !input.trim() || slashSubmitBlocked}
                 aria-busy={busy}
               >
@@ -996,12 +1084,29 @@ export default function MailAssistantPage() {
             </p>
           </form>
         </div>
-      </div>
+            </div>
+          </div>
 
-      <div className="col-span-12 xl:col-span-4 space-y-6">
-        <SequenceProgressPanel refreshKey={historyKey} />
-        <MailHistoryPanel refreshKey={historyKey} />
-      </div>
+          <div
+            role="tabpanel"
+            id="mail-assistant-panel-progress"
+            aria-labelledby="mail-assistant-tab-progress"
+            hidden={view !== "progress"}
+            className="mail-assistant-panel"
+          >
+            <SequenceProgressPanel embedded refreshKey={historyKey} />
+          </div>
+
+          <div
+            role="tabpanel"
+            id="mail-assistant-panel-history"
+            aria-labelledby="mail-assistant-tab-history"
+            hidden={view !== "history"}
+            className="mail-assistant-panel"
+          >
+            <MailHistoryPanel embedded refreshKey={historyKey} />
+          </div>
+        </div>
       </div>
     </Fragment>
   );

@@ -229,10 +229,14 @@ export type SequenceStepProgress = {
   sentAt: string | null;
 };
 
+export type WorkflowProgressKind = "sequence" | "recurring";
+
 export type SequenceProgressItem = {
   workflowId: string;
+  kind: WorkflowProgressKind;
   name: string;
   subjectLabel: string;
+  scheduleLabel: string;
   status: string;
   contact: { id: string; name: string; email: string; company: string };
   timezone: string;
