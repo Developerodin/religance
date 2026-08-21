@@ -16,8 +16,18 @@ export type WorkflowStatus =
   | "cancelled";
 
 /** `once` is a first-class frequency, not maxRuns=1 in disguise. */
-export type Frequency = "once" | "daily" | "weekly" | "monthly";
+export type Frequency = "once" | "daily" | "weekly" | "monthly" | "sequence";
 export type ExecutionMode = "recurring" | "once";
+
+export type StepSpec =
+  | { kind: "after"; minutes: number; from: "start" | "previous" }
+  | { kind: "at"; time: string; dayOffset: number };
+
+export type SequenceStep = {
+  spec: StepSpec;
+  at: string;
+  templateId?: string;
+};
 
 export type RunStatus =
   | "running"
@@ -37,6 +47,8 @@ export type WorkflowSchedule = {
   dayOfMonth?: number;
   endDate?: string;
   maxRuns?: number;
+  startAt?: string;
+  steps?: SequenceStep[];
 };
 
 export type WorkflowCommandContractV1 = {
@@ -64,6 +76,8 @@ export type PreviewSummary = {
   mailbox: string;
   accountId: string;
   nextSendAt: string;
+  /** sequence only: one row per step, in send order. Absent for every other frequency. */
+  steps?: Array<{ index: number; at: string; templateName: string; passed: boolean }>;
   subjectPreview: string;
   bodyPreviewHtml: string;
   contract: WorkflowCommandContractV1;

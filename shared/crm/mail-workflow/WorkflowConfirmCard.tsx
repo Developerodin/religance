@@ -43,6 +43,37 @@ export function sendTimeHasPassed(preview: PreviewSummary, now = Date.now()): bo
   return Number.isFinite(at) && at <= now;
 }
 
+/** The first step that has not fired yet — what the card's timer should target. */
+export function nextUnpassedStep(
+  preview: PreviewSummary,
+  now = Date.now(),
+): { index: number; at: string } | null {
+  const step = preview.steps?.find((s) => new Date(s.at).getTime() > now);
+  return step ? { index: step.index, at: step.at } : null;
+}
+
+/**
+ * True when every step of a sequence is already behind us. Confirming then would fire the
+ * whole list at once, so the button has to stop being clickable rather than explain itself.
+ */
+export function allStepsPassed(preview: PreviewSummary, now = Date.now()): boolean {
+  const steps = preview.steps;
+  if (!steps?.length) return false;
+  return steps.every((s) => new Date(s.at).getTime() <= now);
+}
+
+/** True when any sequence step is already due — backend rejects confirm on this state. */
+export function hasStaleSequenceSteps(preview: PreviewSummary, now = Date.now()): boolean {
+  const steps = preview.steps;
+  if (!steps?.length) return false;
+  return steps.some((s) => new Date(s.at).getTime() <= now);
+}
+
+function stepHasPassed(at: string, now = Date.now()): boolean {
+  const ms = new Date(at).getTime();
+  return Number.isFinite(ms) && ms <= now;
+}
+
 function confirmLabel(preview: PreviewSummary): string {
   if (!isOnce(preview)) return "Confirm & Schedule";
   return isImmediate(preview) ? "Send Now" : "Send Once";
@@ -69,18 +100,26 @@ export default function WorkflowConfirmCard({
 }: WorkflowConfirmCardProps) {
   const [showEmail, setShowEmail] = useState(false);
   const once = isOnce(preview);
+  const sequenceSteps = preview.steps;
+  const sequenceStale = hasStaleSequenceSteps(preview);
+  const stepsAllPassed = allStepsPassed(preview);
 
-  // A one-time card left sitting on screen goes stale: it keeps saying "Send Once" and
-  // "Sends at 10:14" long after 10:14, while confirming it actually sends immediately —
-  // a past runAt fires now. One exact timer, no polling, self-terminating.
+  // A one-time or sequence card left sitting on screen goes stale: it keeps saying "Send Once"
+  // or a future step time long after that moment passed, while confirming actually sends
+  // immediately — a past instant fires now. One exact timer, no polling, self-terminating.
   const [, tick] = useState(0);
   useEffect(() => {
-    if (!once) return;
-    const ms = new Date(preview.nextSendAt).getTime() - Date.now();
+    const target = sequenceSteps?.length
+      ? nextUnpassedStep(preview)?.at
+      : once
+        ? preview.nextSendAt
+        : undefined;
+    if (!target) return;
+    const ms = new Date(target).getTime() - Date.now();
     if (!Number.isFinite(ms) || ms <= 0 || ms > MAX_TIMEOUT_MS) return;
     const timer = window.setTimeout(() => tick((n) => n + 1), ms + 500);
     return () => window.clearTimeout(timer);
-  }, [once, preview.nextSendAt]);
+  }, [once, preview, sequenceSteps, preview.nextSendAt]);
 
   const sendTimePassed = sendTimeHasPassed(preview);
   const label = confirmLabel(preview);
@@ -123,24 +162,54 @@ export default function WorkflowConfirmCard({
               {preview.scheduleLabel} ({preview.timezone})
             </dd>
           </div>
-          <div>
-            <dt className="text-textmuted mb-0.5">
-              {once ? "Sends at" : "First send"}
-            </dt>
-            <dd className="mb-0 font-medium">
-              {sendTimePassed ? (
-                <>
-                  Immediately
-                  <span className="text-textmuted font-normal">
-                    {" "}
-                    — {formatWhen(preview.nextSendAt, preview.timezone)} has passed
-                  </span>
-                </>
-              ) : (
-                formatWhen(preview.nextSendAt, preview.timezone)
-              )}
-            </dd>
-          </div>
+          {sequenceSteps?.length ? (
+            <div className="sm:col-span-2">
+              <dt className="text-textmuted mb-0.5">Sequence — {sequenceSteps.length} sends</dt>
+              <dd className="mb-0">
+                <ol className="list-none ps-0 mb-0 space-y-1 text-[0.8125rem]">
+                  {sequenceSteps.map((step) => {
+                    const passed = stepHasPassed(step.at);
+                    return (
+                      <li key={step.index} className="font-medium">
+                        <span className="text-textmuted font-normal">{step.index}. </span>
+                        {passed ? (
+                          <>
+                            Immediately
+                            <span className="text-textmuted font-normal">
+                              {" "}
+                              — {formatWhen(step.at, preview.timezone)} has passed
+                            </span>
+                          </>
+                        ) : (
+                          formatWhen(step.at, preview.timezone)
+                        )}
+                        <span className="text-textmuted font-normal"> — {step.templateName}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </dd>
+            </div>
+          ) : (
+            <div>
+              <dt className="text-textmuted mb-0.5">
+                {once ? "Sends at" : "First send"}
+              </dt>
+              <dd className="mb-0 font-medium">
+                {sendTimePassed ? (
+                  <>
+                    Immediately
+                    <span className="text-textmuted font-normal">
+                      {" "}
+                      — {formatWhen(preview.nextSendAt, preview.timezone)} has passed
+                    </span>
+                  </>
+                ) : (
+                  formatWhen(preview.nextSendAt, preview.timezone)
+                )}
+              </dd>
+            </div>
+          )}
           <div>
             <dt className="text-textmuted mb-0.5">End condition</dt>
             <dd className="mb-0 font-medium">{preview.endLabel}</dd>
@@ -152,6 +221,14 @@ export default function WorkflowConfirmCard({
             </dd>
           </div>
         </dl>
+
+        {sequenceStale ? (
+          <p className="text-textmuted text-[0.8125rem] mb-0">
+            {stepsAllPassed
+              ? "Every step in this sequence has already passed. Edit the schedule to set new times."
+              : "One or more steps in this sequence have already passed. Edit the schedule or refresh to rebuild with new times."}
+          </p>
+        ) : null}
 
         <div>
           <p className="text-textmuted text-[0.75rem] mb-1">
@@ -215,7 +292,7 @@ export default function WorkflowConfirmCard({
           type="button"
           className="ti-btn ti-btn-primary !py-1.5 !px-3 !text-[0.8125rem] !w-auto !h-auto !mb-0"
           onClick={onConfirm}
-          disabled={confirming}
+          disabled={confirming || sequenceStale}
         >
           {confirming ? pendingLabel : label}
         </button>
