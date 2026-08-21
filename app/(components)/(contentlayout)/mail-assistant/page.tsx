@@ -1,6 +1,7 @@
 "use client";
 
 import MailHistoryPanel from "@/shared/crm/mail-workflow/MailHistoryPanel";
+import SequenceProgressPanel from "@/shared/crm/mail-workflow/SequenceProgressPanel";
 import WorkflowConfirmCard from "@/shared/crm/mail-workflow/WorkflowConfirmCard";
 import {
   clearChat,
@@ -335,6 +336,7 @@ function AssistantMessageView({
 
       {message.confirmAction &&
       message.confirmAction.type !== "schedule" &&
+      message.confirmAction.type !== "update" &&
       message.confirmAction.workflowId ? (
         <div className="mt-3 flex flex-wrap gap-2">
           <button
@@ -996,7 +998,8 @@ export default function MailAssistantPage() {
         </div>
       </div>
 
-      <div className="col-span-12 xl:col-span-4">
+      <div className="col-span-12 xl:col-span-4 space-y-6">
+        <SequenceProgressPanel refreshKey={historyKey} />
         <MailHistoryPanel refreshKey={historyKey} />
       </div>
       </div>

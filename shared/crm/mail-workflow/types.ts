@@ -90,7 +90,7 @@ export type AssistantChoice = {
 };
 
 export type AssistantConfirmAction = {
-  type: "schedule" | "pause" | "resume" | "cancel";
+  type: "schedule" | "update" | "pause" | "resume" | "cancel";
   workflowId?: string;
   label: string;
 };
@@ -215,4 +215,32 @@ export type MailLink = {
   webLink: string | null;
   conversationId: string | null;
   sentAt: string | null;
+};
+
+export type SequenceStepStatus = "sent" | "pending" | "failed" | "skipped";
+
+export type SequenceStepProgress = {
+  index: number;
+  at: string;
+  spec: StepSpec;
+  templateId: string;
+  templateName: string;
+  status: SequenceStepStatus;
+  sentAt: string | null;
+};
+
+export type SequenceProgressItem = {
+  workflowId: string;
+  name: string;
+  subjectLabel: string;
+  status: string;
+  contact: { id: string; name: string; email: string; company: string };
+  timezone: string;
+  totalSteps: number;
+  sentSteps: number;
+  remainingSteps: number;
+  remainingCount: number;
+  nextPendingAt: string | null;
+  startAt: string | null;
+  steps: SequenceStepProgress[];
 };

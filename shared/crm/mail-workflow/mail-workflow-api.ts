@@ -11,6 +11,7 @@ import type {
   MailWorkflow,
   Preflight,
   PreviewSummary,
+  SequenceProgressItem,
   WorkflowCommandContractV1,
 } from "./types";
 
@@ -127,4 +128,22 @@ export function getMailLink(
       recipientId
     )}/link`
   );
+}
+
+export function listSequenceProgress(): Promise<JsonResult<SequenceProgressItem[]>> {
+  return apiGet<SequenceProgressItem[]>("/v1/workflows/sequence-progress");
+}
+
+export function updateWorkflowSchedule(
+  id: string,
+  requestId: string,
+  schedule: WorkflowCommandContractV1["schedule"]
+): Promise<JsonResult<MailWorkflow>> {
+  return apiSend("PATCH", `/v1/workflows/${encodeURIComponent(id)}`, {
+    action: "update",
+    requestId,
+    schedule,
+    confidence: 1,
+    version: "v1",
+  });
 }
