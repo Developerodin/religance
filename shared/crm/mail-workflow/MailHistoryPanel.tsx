@@ -45,6 +45,20 @@ export function relativeFrom(iso: string | null, now = Date.now()): string {
   return `${years} year${years === 1 ? "" : "s"} ago`;
 }
 
+/**
+ * A server-supplied URL is about to be assigned to `location.href`. The tab we open is
+ * `about:blank`, which inherits this origin, so a `javascript:` link would execute as us.
+ * Graph only ever returns https — this is a boundary guard, not a fix for a known bug.
+ */
+export function safeHttpUrl(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export function matchesQuery(contact: MailHistoryContact, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -232,8 +246,19 @@ export default function MailHistoryPanel({ refreshKey = 0 }: { refreshKey?: numb
       );
       return;
     }
-    if (tab) tab.location.href = res.data.webLink;
-    else window.location.href = res.data.webLink;
+    const url = safeHttpUrl(res.data.webLink);
+    if (!tab || !url) {
+      tab?.close();
+      // Never fall back to navigating this tab: a blocked pop-up is a UI problem, and
+      // replacing the CRM with a server-supplied URL is a redirect waiting to be abused.
+      setLinkError(
+        url
+          ? "Allow pop-ups for this site to open the message."
+          : "That mailbox link is not valid."
+      );
+      return;
+    }
+    tab.location.href = url;
   }, []);
 
   const visible = useMemo(

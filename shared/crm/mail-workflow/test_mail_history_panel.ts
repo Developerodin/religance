@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { matchesQuery, relativeFrom } from "./MailHistoryPanel";
+import { matchesQuery, relativeFrom, safeHttpUrl } from "./MailHistoryPanel";
 import type { MailHistoryContact } from "./types";
 
 const NOW = new Date("2026-08-21T10:00:00Z").getTime();
@@ -48,5 +48,16 @@ assert.equal(matchesQuery(contact, "religence"), true, "company is searchable");
 assert.equal(matchesQuery(contact, "theodin.in"), true, "email is searchable");
 assert.equal(matchesQuery(contact, "corticosteroid"), true, "subject is searchable");
 assert.equal(matchesQuery(contact, "quotation"), false);
+
+// The webLink is server-supplied and ends up in location.href of an about:blank tab,
+// which inherits this origin — anything but http(s) must not survive.
+assert.equal(
+  safeHttpUrl("https://outlook.office.com/mail/id/AAQk"),
+  "https://outlook.office.com/mail/id/AAQk",
+);
+assert.equal(safeHttpUrl("javascript:alert(document.cookie)"), null);
+assert.equal(safeHttpUrl("data:text/html,<script>alert(1)</script>"), null);
+assert.equal(safeHttpUrl("/mail/id/AAQk"), null, "a relative link is not a mailbox link");
+assert.equal(safeHttpUrl(""), null);
 
 console.log("test_mail_history_panel: ok");
