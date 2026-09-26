@@ -18,6 +18,17 @@ basePath: "",
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Dev-only: static export does not support next.config redirects.
+  ...(!isProd
+    ? {
+        async redirects() {
+          return [
+            { source: "/register", destination: "/", permanent: false },
+            { source: "/register/", destination: "/", permanent: false },
+          ];
+        },
+      }
+    : {}),
 };
 
 module.exports = nextConfig;

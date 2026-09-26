@@ -3,7 +3,11 @@
 import { register } from "@/shared/auth/auth-client";
 import BrandLogo from "@/shared/layout-components/brand-logo/brand-logo";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLayoutEffect, useRef, useState } from "react";
+
+// Public signup is closed. Keep this page in the repo; flip to true to reopen.
+const REGISTRATION_PUBLIC = false;
 
 // ponytail: policy mirrors the reference plan — >=8 chars, a letter and a number.
 const isStrong = (pw: string) =>
@@ -43,6 +47,13 @@ function CheckDot({ done }: { done: boolean }) {
 }
 
 export default function Register() {
+  const router = useRouter();
+  useLayoutEffect(() => {
+    if (!REGISTRATION_PUBLIC) {
+      router.replace("/");
+    }
+  }, [router]);
+
   const [show, setShow] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [err, setError] = useState("");
@@ -122,6 +133,10 @@ export default function Register() {
     e.preventDefault();
     if (!busy) handleRegister();
   };
+
+  if (!REGISTRATION_PUBLIC) {
+    return null;
+  }
 
   return (
     <div className="container">

@@ -259,14 +259,6 @@ export default function Home() {
                     </div>
                   </div>
                 </form>
-                <div className="text-center mt-8">
-                  <p className="text-defaulttextcolor/70 text-sm">
-                    Don&apos;t have an account?{" "}
-                    <Link href="/register/" className={linkClass}>
-                      Create one
-                    </Link>
-                  </p>
-                </div>
               </div>
             </div>
           </div>
